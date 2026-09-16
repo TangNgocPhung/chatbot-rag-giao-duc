@@ -157,6 +157,46 @@ class GoiYTiepTheoTests(unittest.TestCase):
         self.assertIn("So sánh nội dung giữa các tệp đã đính kèm", goi_y)
 
 
+class GoiYTheoNoiDungTraLoiTests(unittest.TestCase):
+    TRA_LOI_TRUYEN = (
+        "Truyện kể về cuộc giao tranh giữa Sơn Tinh và Thủy Tinh để cầu hôn "
+        "Mị Nương [1].\n"
+        "- **Sính lễ**: vua đòi voi chín ngà, gà chín cựa [2].\n"
+        "- Thủy Tinh đến sau, nổi giận dâng nước đánh Sơn Tinh [3]."
+    )
+
+    def test_tep_truyen_thi_goi_y_bam_nhan_vat_chu_khong_hoi_moc_thoi_gian(self):
+        goi_y = goi_y_cau_hoi.goi_y_theo_tep(
+            "Truyện nói về gì?", ["SƠN TINH - THỦY TINH.docx"],
+            cau_tra_loi=self.TRA_LOI_TRUYEN,
+        )
+        self.assertEqual(goi_y[0], "Sơn Tinh và Thủy Tinh có quan hệ với nhau thế nào?")
+        self.assertIn("Nói rõ hơn về sính lễ", goi_y)
+        self.assertFalse(any("mốc thời gian" in cau for cau in goi_y))
+
+    def test_nguon_khong_duoc_trich_thi_khong_goi_y_hoi_ve_no(self):
+        nguon = [
+            {
+                "name": "thong-tu-37.doc",
+                "van_ban": {"so_hieu": "37/2021/TT-BGDĐT", "loai": "Thông tư"},
+                "article": "Điều 1. Ban hành kèm theo",
+            },
+            {"name": "11-sgk-tin-hoc-11-dinh-huong-tin-hoc-ung-dung.pdf"},
+        ]
+        goi_y = goi_y_cau_hoi.goi_y_tiep_theo(
+            "Môn tin học là môn như thế nào",
+            nguon,
+            cau_tra_loi="Môn Tin học có định hướng **Tin học ứng dụng** [2].",
+        )
+        self.assertEqual(goi_y[0], "Nói rõ hơn về tin học ứng dụng")
+        self.assertFalse(any("37/2021" in cau for cau in goi_y))
+        self.assertFalse(any("sgk-tin-hoc" in cau for cau in goi_y))
+
+    def test_dau_cau_viet_hoa_khong_bi_coi_la_ten_rieng(self):
+        y_chinh = goi_y_cau_hoi.rut_y_chinh("Học sinh được học hai buổi. Giáo viên dạy.")
+        self.assertEqual(y_chinh, [])
+
+
 class GoiYApiTests(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(app)

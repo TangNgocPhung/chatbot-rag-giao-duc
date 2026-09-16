@@ -1257,7 +1257,7 @@ class RAGService:
             yield {
                 "type": "goi_y",
                 "goi_y": goi_y_cau_hoi.goi_y_theo_tep(
-                    question, [tep.ten for tep in cac_tep]
+                    question, [tep.ten for tep in cac_tep], cau_tra_loi=cau_tra_loi
                 ),
             }
             yield {
@@ -1317,7 +1317,8 @@ class RAGService:
         yield {
             "type": "goi_y",
             "goi_y": goi_y_cau_hoi.goi_y_tiep_theo(
-                muc.get("cau_hoi", ""), muc.get("nguon", [])
+                muc.get("cau_hoi", ""), muc.get("nguon", []),
+                cau_tra_loi=muc.get("tra_loi", ""),
             ),
         }
         yield {
@@ -1346,7 +1347,8 @@ class RAGService:
             # Không có nguồn thì cũng không có gì để gợi ý hỏi tiếp: một phép
             # tính số học thuần không dẫn tới văn bản nào trong kho.
             "goi_y": (
-                goi_y_cau_hoi.goi_y_tiep_theo(question, nguon) if nguon else []
+                goi_y_cau_hoi.goi_y_tiep_theo(question, nguon, cau_tra_loi=van_ban)
+                if nguon else []
             ),
         }
         yield {
@@ -1547,7 +1549,9 @@ class RAGService:
                 yield {"type": "warning", "message": kiem_tra.canh_bao()}
             yield {
                 "type": "goi_y",
-                "goi_y": goi_y_cau_hoi.goi_y_tiep_theo(question, cac_nguon),
+                "goi_y": goi_y_cau_hoi.goi_y_tiep_theo(
+                    question, cac_nguon, cau_tra_loi=cau_tra_loi
+                ),
             }
             # Chỉ cache câu trả lời đã qua hậu kiểm. Câu có trích dẫn sai hoặc số
             # liệu không căn cứ được là câu cần sửa, không phải câu để phát lại

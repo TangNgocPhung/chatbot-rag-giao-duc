@@ -30,6 +30,8 @@ const elements = {
   attachmentRow: $('#attachmentRow'),
   suggestionMore: $('#suggestionMore'),
   suggestionChips: $('#suggestionChips'),
+  suggestionMoreTitle: $('#suggestionMoreTitle'),
+  suggestionGrid: $('.suggestion-grid'),
   refreshSuggestions: $('#refreshSuggestions'),
   clearHistory: $('#clearHistoryButton'),
   searchHistory: $('#searchHistoryButton'),
@@ -149,6 +151,8 @@ let historyQuery = '';
 let ketThucTraLoi = [];
 // Tệp người dùng đính kèm cho cuộc trò chuyện hiện tại: id máy chủ -> mô tả tệp.
 const tepDinhKem = new Map();
+// Mẻ gợi ý kho lấy gần nhất - giữ lại để bỏ tệp đính kèm ra là vẽ lại được ngay.
+let goiYKho = [];
 const SO_TEP_TOI_DA = 4;
 
 const assistantIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h10a4 4 0 0 1 4 4v11H9a4 4 0 0 1-4-4V4Z"/><path d="M9 9h6M9 13h4"/></svg>';
@@ -403,6 +407,29 @@ function capNhatGoiYTheoTep() {
   } else {
     elements.input.placeholder = 'Nhập câu hỏi về tài liệu...';
   }
+  // Đã đính kèm tệp thì câu hỏi sẽ trả lời theo tệp, nên bốn thẻ chủ đề và
+  // gợi ý về kho văn bản trên màn hình chào thành lạc đề (đính kèm truyện Sơn
+  // Tinh - Thủy Tinh mà gợi ý "chương trình đào tạo đại học"). Đổi sang gợi ý
+  // về chính tệp; bỏ tệp ra thì trả lại gợi ý kho như cũ.
+  elements.suggestionGrid?.classList.toggle('hidden', sanSang.length > 0);
+  elements.refreshSuggestions?.classList.toggle('hidden', sanSang.length > 0);
+  if (elements.suggestionMoreTitle) {
+    elements.suggestionMoreTitle.textContent = sanSang.length
+      ? 'Gợi ý hỏi về tệp đã đính kèm'
+      : 'Gợi ý khác từ kho tài liệu';
+  }
+  renderGoiYMoDau(sanSang.length ? goiYTheoTep(sanSang) : goiYKho);
+}
+
+function goiYTheoTep(cacTep) {
+  const ten = cacTep.slice(0, 2).map((tep) => tep.ten);
+  const goiY = [];
+  for (const tenTep of ten) goiY.push(`Tóm tắt tệp ${tenTep}`);
+  if (cacTep.length > 1) goiY.push('So sánh nội dung giữa các tệp đã đính kèm');
+  for (const tenTep of ten) {
+    goiY.push(`Tệp ${tenTep} nói về điều gì?`, `Tệp ${tenTep} gồm những phần nào?`);
+  }
+  return goiY.slice(0, 4);
 }
 
 async function boTepDinhKem(tepId, imLang = false) {
@@ -594,12 +621,14 @@ async function taiGoiYMoDau() {
     const response = await fetch(`/api/goi-y?so_luong=${SO_GOI_Y_MO_DAU}`, { cache: 'no-store' });
     if (!response.ok) throw new Error('goi-y');
     const payload = await response.json();
-    renderGoiYMoDau(payload.goi_y || []);
+    goiYKho = payload.goi_y || [];
   } catch (error) {
     // Không lấy được gợi ý thì ẩn hẳn hàng này: bốn thẻ chủ đề vẫn dùng bình
     // thường, không cần báo lỗi cho một thứ chỉ để bấm cho nhanh.
-    renderGoiYMoDau([]);
+    goiYKho = [];
   } finally {
+    // Vẽ qua capNhatGoiYTheoTep: đang có tệp đính kèm thì gợi ý về tệp vẫn giữ.
+    capNhatGoiYTheoTep();
     elements.refreshSuggestions.disabled = false;
   }
 }
