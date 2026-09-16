@@ -20,8 +20,11 @@ import goi_y_cau_hoi
 import kiem_tra_tra_loi
 import hieu_luc_bo_sung
 import phan_loai_giao_duc
+import danh_gia_hoc_sinh
+import dinh_muc_tiet_day
 import tep_dinh_kem
 import tinh_luong
+import tinh_toan
 import tu_vung_kho
 import van_ban_meta
 from capnhat_tailieu_moi import main as cap_nhat_chi_muc_tren_dia
@@ -176,6 +179,12 @@ class RAGService:
         self._no_text_sources: list[str] = []
         self._initialization_lock = threading.Lock()
         self._generation_lock = threading.Lock()
+        # Cờ xin dừng câu trả lời đang sinh. Người dùng bấm "Cuộc trò chuyện
+        # mới" hay nút dừng thì trình duyệt cắt kết nối, nhưng bộ sinh phía máy
+        # chủ không tự biết điều đó - phải có tín hiệu tường minh, nếu không nó
+        # giữ khoá sinh câu trả lời và mọi câu hỏi sau đều xếp hàng sau một câu
+        # chẳng còn ai đọc.
+        self.huy_sinh = threading.Event()
         self._update_lock = threading.Lock()
         self._index_progress_lock = threading.Lock()
         self.index_progress = {
@@ -1324,29 +1333,46 @@ class RAGService:
         }
 
     @staticmethod
-    def _tra_loi_tinh_luong(
-        question: str, van_ban: str, nguon: list[dict]
+    def _tra_loi_cong_cu(
+        question: str, van_ban: str, nguon: list[dict], cong_cu: str
     ) -> Iterator[dict]:
-        """Phát phiếu tính lương theo đúng thứ tự sự kiện của một câu trả lời
-        thường, để giao diện không cần biết câu này đến từ công cụ tính."""
+        """Phát kết quả của một công cụ tính theo đúng thứ tự sự kiện của câu
+        trả lời thường, để giao diện không cần biết câu này đến từ đâu."""
         bat_dau = time.perf_counter()
         yield {"type": "sources", "sources": nguon}
         yield {"type": "token", "content": van_ban}
         yield {
             "type": "goi_y",
-            "goi_y": goi_y_cau_hoi.goi_y_tiep_theo(question, nguon),
+            # Không có nguồn thì cũng không có gì để gợi ý hỏi tiếp: một phép
+            # tính số học thuần không dẫn tới văn bản nào trong kho.
+            "goi_y": (
+                goi_y_cau_hoi.goi_y_tiep_theo(question, nguon) if nguon else []
+            ),
         }
         yield {
             "type": "done",
             "elapsed_seconds": round(time.perf_counter() - bat_dau, 1),
             # Hậu kiểm của kiem_tra_tra_loi đối chiếu từng con số với đoạn được
             # trích - đúng cho câu do mô hình sinh, nhưng vô nghĩa ở đây: mọi
-            # con số đều do Python tính và đã in kèm công thức ngay trong phiếu,
-            # nên người đọc kiểm lại được trực tiếp, không cần đối chiếu chuỗi.
+            # con số đều do Python tính và đã in kèm công thức ngay trong kết
+            # quả, nên người đọc kiểm lại được trực tiếp, không cần đối chiếu
+            # chuỗi.
             "citations_ok": True,
             "figures_ok": True,
-            "tinh_luong": True,
+            "cong_cu": cong_cu,
+            "tinh_luong": cong_cu == "tinh_luong",
         }
+
+    def yeu_cau_dung(self) -> bool:
+        """Xin dừng câu trả lời đang sinh; True nghĩa là có câu để dừng.
+
+        Chỉ bật cờ khi đang thật sự sinh dở, vì cờ bật lúc rảnh sẽ nằm lại đó và
+        giết luôn câu hỏi kế tiếp.
+        """
+        if not self._generation_lock.locked():
+            return False
+        self.huy_sinh.set()
+        return True
 
     def stream_answer(
         self,
@@ -1357,6 +1383,9 @@ class RAGService:
     ) -> Iterator[dict]:
         """Ghi mốc hoạt động quanh mỗi lượt hỏi để trình hẹn nạp tệp mới vào chỉ
         mục biết khi nào người dùng thật sự ngừng hỏi."""
+        # Xoá cờ dừng trước khi phát sự kiện đầu tiên: lượt hỏi mới không được
+        # thừa hưởng lệnh dừng của lượt trước.
+        self.huy_sinh.clear()
         self.thoi_diem_chat_cuoi = time.time()
         try:
             yield from self._sinh_cau_tra_loi(question, history, tep_ids, pham_vi)
@@ -1376,17 +1405,31 @@ class RAGService:
             yield from self._tra_loi_theo_tep(question, history, tep_ids)
             return
 
-        # Câu hỏi tính lương rẽ sang công cụ tính (tinh_luong.py) trước cả cache.
+        # Câu hỏi tính toán rẽ sang công cụ tính bằng Python trước cả cache.
         # Hai lý do phải đặt ở đây chứ không đặt sau:
         #   - Cache ngữ nghĩa sẽ coi "GV THPT hạng III bậc 1" và "GV THPT hạng
         #     III bậc 5" là gần như cùng một câu, rồi phát lại phiếu lương của
         #     người này cho người kia. Phiếu lương sai người còn tệ hơn chậm.
+        #     Với số học thuần thì còn rõ hơn: "12% của 5 triệu" và "12% của 6
+        #     triệu" gần như trùng khít về ngữ nghĩa mà đáp số khác hẳn.
         #   - Phép tính chạy trong micro giây, không cần xếp hàng sau câu đang
         #     sinh dở 150 giây trên CPU.
-        phieu_luong = tinh_luong.tra_loi(question)
-        if phieu_luong is not None:
-            yield from self._tra_loi_tinh_luong(question, *phieu_luong)
-            return
+        #
+        # Thứ tự thử: công cụ có phạm vi hẹp nhất đi trước. tinh_toan nhận cả
+        # những biểu thức trần trụi nên phải đứng cuối, sau khi hai công cụ có
+        # căn cứ pháp lý đã nhận phần của mình.
+        for ten_cong_cu, cong_cu in (
+            ("tinh_luong", tinh_luong),
+            ("dinh_muc_tiet_day", dinh_muc_tiet_day),
+            ("danh_gia_hoc_sinh", danh_gia_hoc_sinh),
+            ("tinh_toan", tinh_toan),
+        ):
+            ket_qua_tinh = cong_cu.tra_loi(question)
+            if ket_qua_tinh is not None:
+                yield from self._tra_loi_cong_cu(
+                    question, *ket_qua_tinh, ten_cong_cu
+                )
+                return
 
         # Tra cache TRƯỚC khi giành khóa sinh câu trả lời: một câu đã có sẵn
         # trong cache không nên phải xếp hàng sau câu đang chạy dở 150 giây.

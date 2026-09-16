@@ -49,6 +49,26 @@ Sau khi thêm, sửa hoặc xóa tài liệu trong kho, có thể cập nhật c
 
 Kết quả OCR và sổ theo dõi giúp lần chạy tiếp theo tiếp tục mà không xử lý lại toàn bộ kho.
 
+## Câu hỏi tính toán
+
+Những câu cần một con số tính ra được rẽ sang công cụ Python chạy trước cả cache và khâu truy hồi, thay vì để mô hình làm toán. Lý do nằm ở chính ba lớp chống bịa của hệ thống: prompt cấm ghép số liệu giữa hai đoạn trích, hậu kiểm gắn cờ mọi con số không có nguyên văn trong đoạn trích, và model 3B chạy CPU không đáng tin ở số học nhiều bước. Mỗi công cụ in kèm công thức đã thay số để người đọc kiểm lại bằng máy tính bỏ túi.
+
+| Công cụ | Nhận câu hỏi dạng | Căn cứ |
+|---|---|---|
+| `tinh_luong.py` | lương, phụ cấp của nhà giáo theo chức danh, hạng, bậc | Nghị định 73/2024, Thông tư 31/2026, Nghị định phụ cấp ưu đãi |
+| `dinh_muc_tiet_day.py` | định mức tiết dạy, mức giảm khi kiêm nhiệm, số tiết dạy vượt | Thông tư 04/2026/TT-BGDĐT |
+| `danh_gia_hoc_sinh.py` | điểm trung bình môn, xếp loại kết quả học tập, danh hiệu cuối năm | Thông tư 22/2021/TT-BGDĐT |
+| `tinh_toan.py` | số học thuần: phần trăm, tăng giảm theo tỉ lệ, biểu thức | không dùng văn bản nào, nên không gắn chip nguồn |
+
+```powershell
+.\.venv\Scripts\python.exe tinh_luong.py "tính lương giáo viên THPT hạng III bậc 1"
+.\.venv\Scripts\python.exe dinh_muc_tiet_day.py "giáo viên GDTX chủ nhiệm 1 lớp dạy bao nhiêu tiết"
+.\.venv\Scripts\python.exe danh_gia_hoc_sinh.py "điểm thường xuyên 8, 9, giữa kì 7, cuối kì 8"
+.\.venv\Scripts\python.exe tinh_toan.py "12% của 2.340.000"
+```
+
+Hằng số nào chưa có văn bản trong kho chứng minh thì kết quả nói rõ "chưa có trong kho tài liệu" và không gắn chip nguồn, thay vì im lặng đưa ra một con số trông như đã được kiểm chứng. Cổng nhận câu của cả ba công cụ nghiêng hẳn về phía bỏ sót: chúng đứng trước RAG nên nhận nhầm một câu tra cứu thì người dùng mất hẳn câu trả lời từ kho.
+
 ## Đo chất lượng hệ thống
 
 Bộ câu hỏi chuẩn nằm ở `bo_cau_hoi_benchmark.json` (127 câu, trong đó 97 câu có nhãn nguồn đúng và 30 câu cố tình lạc đề).
