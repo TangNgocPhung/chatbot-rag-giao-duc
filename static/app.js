@@ -508,7 +508,14 @@ async function openChat(chat) {
   elements.messages.replaceChildren();
   for (const item of chat.messages || []) {
     if (item.role === 'user') addUserMessage(item.content, item.tep || []);
-    else addCompletedAssistantMessage(item.content, item.sources || [], item.elapsed, item.warning, item.hieuLuc, item.goiY);
+    else addCompletedAssistantMessage(
+      item.content,
+      item.sources || [],
+      item.elapsed,
+      item.warning || (item.interrupted ? 'Câu trả lời này đã bị dừng giữa chừng.' : ''),
+      item.hieuLuc,
+      item.goiY,
+    );
   }
   renderHistory();
   closeSidebar();
@@ -1038,11 +1045,28 @@ async function submitQuestion(question) {
     .filter((item) => item.role === 'user' || item.role === 'assistant')
     .slice(-6)
     .map((item) => ({ role: item.role, content: item.content.slice(0, 4000) }));
+  // Chốt mã hội thoại TRƯỚC khi gửi, rồi dùng lại đúng mã đó cho bản ghi
+  // localStorage bên dưới - nhờ vậy lịch sử trên máy và trên máy chủ trỏ về
+  // cùng một cuộc trò chuyện mà không cần thêm vòng gọi nào. Mã phải nằm ngoài
+  // try: nhánh catch cũng cần nó để lưu lại cuộc trò chuyện bị dừng giữa chừng.
+  const hoiThoaiId = currentChat?.id || taoMaHoiThoai();
+
+  // Ghi cuộc trò chuyện vào lịch sử trình duyệt. Dùng chung cho cả lúc trả lời
+  // xong lẫn lúc bị dừng giữa chừng, nhờ vậy câu hỏi không bao giờ biến mất chỉ
+  // vì người dùng bấm "Cuộc trò chuyện mới" khi máy đang xử lý.
+  const luuVaoLichSu = (noiDung, thongTinThem = {}) => {
+    const chat = currentChat || {
+      id: hoiThoaiId,
+      title: question.slice(0, 62),
+      messages: [],
+    };
+    chat.messages.push({ role: 'user', content: question, tep: tenTep });
+    chat.messages.push({ role: 'assistant', content: noiDung, sources, ...thongTinThem });
+    currentChat = chat;
+    saveHistory(chat);
+  };
+
   try {
-    // Chốt mã hội thoại TRƯỚC khi gửi, rồi dùng lại đúng mã đó cho bản ghi
-    // localStorage bên dưới - nhờ vậy lịch sử trên máy và trên máy chủ trỏ về
-    // cùng một cuộc trò chuyện mà không cần thêm vòng gọi nào.
-    const hoiThoaiId = currentChat?.id || taoMaHoiThoai();
     const response = await fetch('/api/chat/stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-RAG-Client': maTrinhDuyet() },
@@ -1098,33 +1122,21 @@ async function submitQuestion(question) {
     renderWarning(ui.answer, warning);
     renderCompletedActions(ui, answer, elapsed, tuCache);
     renderGoiYTiepTheo(ui.body, goiY);
-    const chat = currentChat || {
-      id: hoiThoaiId,
-      title: question.slice(0, 62),
-      messages: [],
-    };
-    chat.messages.push({ role: 'user', content: question, tep: tenTep });
-    chat.messages.push({ role: 'assistant', content: answer, sources, elapsed, warning, hieuLuc, goiY });
-    currentChat = chat;
-    saveHistory(chat);
+    luuVaoLichSu(answer, { elapsed, warning, hieuLuc, goiY });
   } catch (error) {
     if (error.name === 'AbortError') {
+      // Dừng lúc chưa có chữ nào cũng vẫn lưu: người dùng mở lại ở mục "Gần đây"
+      // là thấy câu mình đã hỏi để hỏi lại, thay vì mất trắng.
       if (answer) {
         ui.thinking.classList.add('hidden');
         renderCompletedActions(ui, answer, null);
-        const chat = currentChat || {
-          id: hoiThoaiId,
-          title: question.slice(0, 62),
-          messages: [],
-        };
-        chat.messages.push({ role: 'user', content: question, tep: tenTep });
-        chat.messages.push({ role: 'assistant', content: answer, sources, interrupted: true });
-        currentChat = chat;
-        saveHistory(chat);
-        showToast('Đã dừng tạo câu trả lời');
       } else {
         renderError(ui, 'Đã dừng câu trả lời theo yêu cầu.');
       }
+      luuVaoLichSu(answer, { interrupted: true });
+      showToast(answer
+        ? 'Đã dừng tạo câu trả lời - phần đã trả lời nằm ở mục Gần đây'
+        : 'Đã dừng câu hỏi - câu hỏi được giữ lại ở mục Gần đây');
     } else {
       renderError(ui, error.message || 'Không thể nhận câu trả lời.');
     }
