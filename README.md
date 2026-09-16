@@ -67,6 +67,8 @@ Những câu cần một con số tính ra được rẽ sang công cụ Python 
 .\.venv\Scripts\python.exe tinh_toan.py "12% của 2.340.000"
 ```
 
+Gõ có dấu hay không dấu đều được: câu hỏi đi qua một bước bỏ dấu trước khi so mẫu, nên "tinh luong giao vien THPT hang III bac 1" và bản gõ đủ dấu đi chung một đường.
+
 Hằng số nào chưa có văn bản trong kho chứng minh thì kết quả nói rõ "chưa có trong kho tài liệu" và không gắn chip nguồn, thay vì im lặng đưa ra một con số trông như đã được kiểm chứng. Cổng nhận câu của cả ba công cụ nghiêng hẳn về phía bỏ sót: chúng đứng trước RAG nên nhận nhầm một câu tra cứu thì người dùng mất hẳn câu trả lời từ kho.
 
 ## Đo chất lượng hệ thống

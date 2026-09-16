@@ -28,6 +28,8 @@ import re
 import sys
 from dataclasses import dataclass, field
 
+from can_cu_van_ban import bo_dau
+
 
 # Chặn trên cho mọi thứ có thể phình ra. Người dùng gõ một dòng trong ô chat,
 # không ai gõ biểu thức 200 token - còn 2^999999 thì treo cả tiến trình.
@@ -60,10 +62,9 @@ MAU_NGHIN = re.compile(r"^\d{1,3}(?:\.\d{3})+$")
 MAU_THAP_PHAN_CHAM = re.compile(r"^\d+\.\d+$")
 
 DON_VI = {
-    "nghìn": 1_000, "nghin": 1_000, "ngàn": 1_000, "ngan": 1_000,
-    "triệu": 1_000_000, "trieu": 1_000_000,
-    "tỷ": 1_000_000_000, "ty": 1_000_000_000,
-    "tỉ": 1_000_000_000, "ti": 1_000_000_000,
+    "nghin": 1_000, "ngan": 1_000,
+    "trieu": 1_000_000,
+    "ty": 1_000_000_000, "ti": 1_000_000_000,
 }
 
 
@@ -127,11 +128,11 @@ DONG_NGHIA = {"×": "*", "·": "*", "÷": "/", ":": "/", "−": "-", "–": "-",
 # "của" là dấu nhân nhưng CHỈ sau dấu phần trăm - "12% của 40" là phép nhân,
 # còn "điểm của lớp 3" thì không phải phép tính nào cả.
 CHU_PHEP = [
-    (r"\bcộng\b|\bcong\b", "+"),
-    (r"\btrừ đi\b|\btrừ\b|\btru\b", "-"),
-    (r"\bnhân với\b|\bnhân\b|\bnhan\b", "*"),
+    (r"\bcong\b", "+"),
+    (r"\btru di\b|\btru\b", "-"),
+    (r"\bnhan voi\b|\bnhan\b", "*"),
     (r"\bchia cho\b|\bchia\b", "/"),
-    (r"\btrên\b|\btren\b", "/"),
+    (r"\btren\b", "/"),
 ]
 
 MAU_TOKEN = re.compile(r"""
@@ -155,6 +156,7 @@ def tach_token(bieu_thuc: str) -> list[Token]:
     không hiểu nghĩa là đây không phải biểu thức số học, mà là câu tra cứu bị
     lọt vào nhầm chỗ.
     """
+    bieu_thuc = bo_dau(bieu_thuc)
     for ky_tu, thay in DONG_NGHIA.items():
         bieu_thuc = bieu_thuc.replace(ky_tu, thay)
 
@@ -304,41 +306,41 @@ def tinh_bieu_thuc(bieu_thuc: str) -> float:
 # Chữ dẫn bao quanh phép tính, bỏ đi thì còn lại đúng biểu thức. Xếp cụm dài
 # trước cụm ngắn: bỏ "là bao nhiêu" trước khi bỏ "là", nếu không thì "là" bị
 # bốc đi trước và để lại chữ "bao nhiêu" chỏng chơ.
+# Viết KHÔNG DẤU: câu hỏi đã đi qua bo_dau() trước khi bóc chữ dẫn.
 CHU_DAN = [
-    r"làm ơn", r"cho (?:mình|tôi|em|anh|chị) hỏi", r"cho (?:mình|tôi|em) biết",
-    r"giúp (?:mình|tôi|em) tính",
-    r"tính giúp(?: (?:mình|tôi|em))?", r"tính hộ(?: (?:mình|tôi|em))?",
-    r"tính giùm(?: (?:mình|tôi|em))?", r"tính xem", r"tính",
-    r"kết quả (?:của|phép tính)?",
-    r"là bao nhiêu", r"bằng bao nhiêu", r"ra bao nhiêu", r"bao nhiêu",
-    r"bằng mấy", r"ra mấy", r"thì bằng", r"bằng", r"là",
-    r"nhé", r"nhỉ", r"ạ", r"vậy", r"thế", r"với", r"đi",
+    r"lam on", r"cho (?:minh|toi|em|anh|chi) hoi", r"cho (?:minh|toi|em) biet",
+    r"giup (?:minh|toi|em) tinh",
+    r"tinh giup(?: (?:minh|toi|em))?", r"tinh ho(?: (?:minh|toi|em))?",
+    r"tinh gium(?: (?:minh|toi|em))?", r"tinh xem", r"tinh",
+    r"ket qua (?:cua|phep tinh)?",
+    r"la bao nhieu", r"bang bao nhieu", r"ra bao nhieu", r"bao nhieu",
+    r"bang may", r"ra may", r"thi bang", r"bang", r"la",
+    r"nhe", r"nhi", r"a", r"vay", r"the", r"voi", r"di",
 ]
-MAU_CHU_DAN = re.compile(r"(?:" + "|".join(CHU_DAN) + r")", re.IGNORECASE)
+
+# Kẹp \b hai đầu là BẮT BUỘC, không phải cho gọn. Sau khi bỏ dấu, "ạ" thành
+# một chữ "a" trơ trọi và "là" thành "la" - không chốt biên từ thì chúng ăn mất
+# chữ a giữa "cua", cắt "tang" thành "t ng", và cả câu vỡ vụn trước khi tới
+# được bộ phân tích.
+MAU_CHU_DAN = re.compile(r"\b(?:" + "|".join(CHU_DAN) + r")\b")
 
 # Có mấy chữ này thì đây là câu tra cứu văn bản, không phải phép tính - nhường
 # đường cho RAG kể cả khi phần còn lại trông giống biểu thức. "Thông tư 22/2021
 # quy định gì" mà lọt vào đây thì sẽ thành phép chia 22 cho 2021.
 MAU_TRA_CUU = re.compile(
-    r"điều\s*\d|khoản|thông tư|nghị định|quyết định|luật|văn bản|quy định|"
-    r"theo\s|căn cứ|hiệu lực|tài liệu|ở đâu|thế nào|như thế nào|vì sao|tại sao|"
-    r"là gì|gồm những|hạng\s*i|bậc\s*\d|hệ số|năm học|lớp\s*\d",
-    re.IGNORECASE,
+    r"dieu\s*\d|khoan|thong tu|nghi dinh|quyet dinh|luat|van ban|quy dinh|"
+    r"theo\s|can cu|hieu luc|tai lieu|o dau|the nao|nhu the nao|vi sao|tai sao|"
+    r"la gi|gom nhung|hang\s*i|bac\s*\d|he so|nam hoc|lop\s*\d"
 )
 
 MAU_TANG_GIAM = re.compile(
-    r"^(?P<goc>.+?)\s*(?P<huong>tăng|tang|giảm|giam)\s*"
-    r"(?P<ty_le>\d[\d.,]*)\s*%$",
-    re.IGNORECASE,
+    r"^(?P<goc>.+?)\s*(?P<huong>tang|giam)\s*(?P<ty_le>\d[\d.,]*)\s*%$"
 )
 MAU_TY_LE = re.compile(
-    r"^(?P<phan>.+?)\s*(?:trên|tren|/|so với|so voi|trong)\s*(?P<tong>.+?)"
-    r"\s*(?:ra|bằng|=)?\s*(?:bao nhiêu|mấy|may)?\s*(?:%|phần trăm|phan tram)$",
-    re.IGNORECASE,
+    r"^(?P<phan>.+?)\s*(?:tren|/|so voi|trong)\s*(?P<tong>.+?)"
+    r"\s*(?:ra|bang|=)?\s*(?:bao nhieu|may)?\s*(?:%|phan tram)$"
 )
-MAU_PHAN_TRAM_CUA = re.compile(
-    r"%\s*(?:của|cua|of|trong số|trong so)\b", re.IGNORECASE
-)
+MAU_PHAN_TRAM_CUA = re.compile(r"%\s*(?:cua|of|trong so)\b")
 
 
 @dataclass
@@ -359,7 +361,7 @@ class KetQua:
 
 def _bo_chu_dan(cau_hoi: str) -> str:
     """Bỏ chữ dẫn và dấu câu, còn lại phần ruột của câu hỏi."""
-    con = MAU_CHU_DAN.sub(" ", cau_hoi)
+    con = MAU_CHU_DAN.sub(" ", bo_dau(cau_hoi))
     con = con.replace("?", " ").replace("!", " ").replace(";", " ")
     return re.sub(r"\s+", " ", con).strip(" ,.")
 
@@ -395,7 +397,7 @@ def nhan_dien(cau_hoi: str) -> KetQua | None:
     thuần - để nó đi tiếp đường RAG bình thường."""
     if not cau_hoi or len(cau_hoi) > DAI_TOI_DA:
         return None
-    if MAU_TRA_CUU.search(cau_hoi):
+    if MAU_TRA_CUU.search(bo_dau(cau_hoi)):
         return None
 
     con = _bo_chu_dan(cau_hoi)

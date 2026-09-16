@@ -28,7 +28,7 @@ import re
 import sys
 from dataclasses import dataclass, field
 
-from can_cu_van_ban import CanCu, nguon_tu_can_cu
+from can_cu_van_ban import CanCu, bo_dau, nguon_tu_can_cu
 
 
 # ============================================================
@@ -138,32 +138,32 @@ KHOAN_GIAM: list[KhoanGiam] = [
     KhoanGiam(
         "chu_nhiem", "Chủ nhiệm lớp học chương trình giáo dục thường xuyên",
         4, TT04_GIAM,
-        mau=r"chủ nhiệm|chu nhiem|gvcn",
+        mau=r"chu nhiem|gvcn",
     ),
     KhoanGiam(
         "truong_phong", "Trưởng phòng hoặc tổ trưởng", 6, TT04_GIAM,
         toi_da=True,
-        mau=r"trưởng phòng|truong phong|tổ trưởng|to truong",
+        mau=r"truong phong|to truong",
     ),
     KhoanGiam(
         "pho_truong_phong", "Phó trưởng phòng hoặc tổ phó", 4, TT04_GIAM,
         toi_da=True,
-        mau=r"phó trưởng phòng|pho truong phong|tổ phó|to pho",
+        mau=r"pho truong phong|to pho",
     ),
     KhoanGiam(
         "tu_van", "Kiêm nhiệm công tác tư vấn học viên", 8, TT04_GIAM,
         toi_da=True,
-        mau=r"tư vấn học viên|tu van hoc vien|tư vấn học sinh|tư vấn tâm lý",
+        mau=r"tu van hoc vien|tu van hoc sinh|tu van tam ly",
     ),
     KhoanGiam(
         "tap_su", "Trong thời gian tập sự", 2, TT04_GIAM_KHAC,
         vao_tran=False,
-        mau=r"tập sự|tap su",
+        mau=r"tap su",
     ),
     KhoanGiam(
         "nuoi_con_nho", "Nữ nuôi con dưới 12 tháng tuổi", 3, TT04_GIAM_KHAC,
         vao_tran=False,
-        mau=r"nuôi con dưới 12 tháng|nuoi con duoi 12 thang|con nhỏ dưới 12 tháng",
+        mau=r"nuoi con duoi 12 thang|con nho duoi 12 thang",
     ),
 ]
 
@@ -174,14 +174,14 @@ KHOAN_GIAM: list[KhoanGiam] = [
 KIEM_NHIEM_KHAC = KhoanGiam(
     "kiem_nhiem_khac", "Kiêm nhiệm vị trí việc làm khác", 4, TT04_GIAM,
     toi_da=True,
-    mau=r"kiêm nhiệm|kiem nhiem",
+    mau=r"kiem nhiem",
 )
 
 # Nhiệm vụ mà Thông tư đẩy sang văn bản khác - nhận diện được để cảnh báo, chứ
 # không tính thành tiết.
 NGOAI_KHO = [
-    (r"công đoàn|cong doan", TT_CONG_DOAN),
-    (r"bí thư đoàn|bi thu doan|trợ lý thanh niên|phó bí thư đoàn|cố vấn đoàn",
+    (r"cong doan", TT_CONG_DOAN),
+    (r"bi thu doan|tro ly thanh nien|pho bi thu doan|co van doan",
      QD_DOAN),
 ]
 
@@ -380,49 +380,48 @@ def _gom_can_cu(kq: KetQua) -> None:
 # NHẬN DIỆN CÂU HỎI
 # ============================================================
 # Cổng 1 - câu này có thuộc chuyện định mức tiết dạy không.
+# Mọi mẫu ở đây viết KHÔNG DẤU - câu hỏi đã đi qua bo_dau() trước khi so.
 TU_KHOA_DINH_MUC = re.compile(
-    r"định mức|dinh muc|tiết dạy|tiet day|tiết/tuần|tiết một tuần|"
-    r"chế độ làm việc|che do lam viec|thừa giờ|thua gio|vượt định mức|"
-    r"dạy bao nhiêu tiết|số tiết phải dạy|giảm\s*(?:mấy|bao nhiêu)?\s*tiết",
-    re.IGNORECASE,
+    r"dinh muc|tiet day|tiet/tuan|tiet mot tuan|che do lam viec|thua gio|"
+    r"vuot dinh muc|day bao nhieu tiet|so tiet phai day|"
+    r"giam\s*(?:may|bao nhieu)?\s*tiet"
 )
 
 # Cổng 2 - Thông tư 04/2026 chỉ điều chỉnh giáo dục thường xuyên. Câu hỏi phải
 # tự nêu phạm vi đó ra thì mới nhận; nêu một cấp học khác thì nhường cho RAG.
 TU_KHOA_GDTX = re.compile(
-    r"giáo dục thường xuyên|giao duc thuong xuyen|\bgdtx\b|\bgdnn\b|"
-    r"trung tâm giáo dục nghề nghiệp|học viên|hoc vien|bổ túc",
-    re.IGNORECASE,
+    r"giao duc thuong xuyen|\bgdtx\b|\bgdnn\b|"
+    r"trung tam giao duc nghe nghiep|hoc vien|bo tuc"
 )
 CAP_HOC_KHAC = re.compile(
-    r"tiểu học|tieu hoc|trung học cơ sở|\bthcs\b|trung học phổ thông|\bthpt\b|"
-    r"mầm non|mam non|mẫu giáo|phổ thông|pho thong|đại học|dai hoc|cao đẳng|"
-    r"giảng viên|giang vien|trung cấp|dự bị đại học",
-    re.IGNORECASE,
+    r"tieu hoc|trung hoc co so|\bthcs\b|trung hoc pho thong|\bthpt\b|"
+    r"mam non|mau giao|pho thong|dai hoc|cao dang|giang vien|trung cap|"
+    r"du bi dai hoc"
 )
 
 # Câu hỏi về THỦ TỤC hoặc CĂN CỨ, không phải về một con số.
 TU_KHOA_TRA_CUU = re.compile(
-    r"quy định (?:ở đâu|tại đâu)|căn cứ nào|văn bản nào|điều nào|"
-    r"thủ tục|hồ sơ|trình tự|ai quyết định|thẩm quyền|có hiệu lực",
-    re.IGNORECASE,
+    r"quy dinh (?:o dau|tai dau)|can cu nao|van ban nao|dieu nao|"
+    r"thu tuc|ho so|trinh tu|ai quyet dinh|tham quyen|co hieu luc"
 )
 
 VAI_TRO_MAU = [
-    ("pho_giam_doc", r"phó giám đốc|pho giam doc|phó hiệu trưởng"),
-    ("giam_doc", r"giám đốc|giam doc|hiệu trưởng"),
+    ("pho_giam_doc", r"pho giam doc|pho hieu truong"),
+    ("giam_doc", r"giam doc|hieu truong"),
 ]
 
 
 def nhan_dien(cau_hoi: str) -> ThamSo | None:
     """Đọc câu hỏi thành tham số tính định mức; None nghĩa là câu này không
     thuộc phạm vi Thông tư 04/2026, hoặc chỉ hỏi căn cứ chứ không hỏi con số."""
-    if not cau_hoi or TU_KHOA_TRA_CUU.search(cau_hoi):
+    if not cau_hoi:
         return None
-    if not TU_KHOA_DINH_MUC.search(cau_hoi):
+    thap = bo_dau(cau_hoi)
+    if TU_KHOA_TRA_CUU.search(thap):
+        return None
+    if not TU_KHOA_DINH_MUC.search(thap):
         return None
 
-    thap = cau_hoi.lower()
     if not TU_KHOA_GDTX.search(thap):
         return None
     # Câu nhắc cả giáo dục thường xuyên lẫn một cấp học khác thì đang so sánh
@@ -451,7 +450,7 @@ def nhan_dien(cau_hoi: str) -> ThamSo | None:
         if re.search(KIEM_NHIEM_KHAC.mau, thap):
             ts.khoan_giam.append(KIEM_NHIEM_KHAC)
 
-    m = re.search(r"(\d{1,2})\s*tuần\s*(?:thực dạy)?", thap)
+    m = re.search(r"(\d{1,2})\s*tuan\s*(?:thuc day)?", thap)
     if m:
         so = int(m.group(1))
         if 1 <= so <= 52:
@@ -459,8 +458,8 @@ def nhan_dien(cau_hoi: str) -> ThamSo | None:
 
     # "đang dạy 22 tiết/tuần" - số tiết đang được phân công, để tính phần vượt.
     m = re.search(
-        r"(?:dạy|phân công|đang dạy|thực dạy)\s*(?:là\s*)?(\d{1,2}(?:[.,]\d)?)"
-        r"\s*tiết\s*(?:/|một |mỗi )?\s*tuần",
+        r"(?:day|phan cong|dang day|thuc day)\s*(?:la\s*)?(\d{1,2}(?:[.,]\d)?)"
+        r"\s*tiet\s*(?:/|mot |moi )?\s*tuan",
         thap,
     )
     if m:

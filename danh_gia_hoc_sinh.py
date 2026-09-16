@@ -24,7 +24,7 @@ import re
 import sys
 from dataclasses import dataclass, field
 
-from can_cu_van_ban import CanCu, nguon_tu_can_cu
+from can_cu_van_ban import CanCu, bo_dau, nguon_tu_can_cu
 
 
 # ============================================================
@@ -101,6 +101,11 @@ NGUONG_XUAT_SAC = 9.0
 # Thứ tự từ cao xuống thấp; chỉ số trong danh sách chính là "mức liền kề" mà
 # khoản 3 Điều 9 nói tới.
 CAC_MUC = ["Tốt", "Khá", "Đạt", "Chưa đạt"]
+
+# Câu hỏi đi qua bo_dau() nên mức đọc ra từ câu là chuỗi không dấu; dịch ngược
+# về đúng chữ mà CAC_MUC và danh_hieu_khen_thuong() dùng, thay vì so chuỗi
+# không dấu ở hai chỗ đó rồi quên mất một chỗ.
+MUC_TU_KHONG_DAU = {bo_dau(m): m for m in CAC_MUC}
 
 # Điều 5 khoản 3 điểm a - những môn chỉ đánh giá bằng nhận xét, không có điểm.
 MON_NHAN_XET = [
@@ -277,47 +282,37 @@ def dinh_dang_diem(x: float) -> str:
 # NHẬN DIỆN CÂU HỎI
 # ============================================================
 # Cổng 1 - câu này có thuộc chuyện điểm và xếp loại không.
+# Mọi mẫu ở đây viết KHÔNG DẤU - câu hỏi đã đi qua bo_dau() trước khi so.
 TU_KHOA_DIEM = re.compile(
-    r"đtb|điểm trung bình|diem trung binh|thường xuyên|thuong xuyen|"
-    r"giữa kì|giữa kỳ|giua ki|cuối kì|cuối kỳ|cuoi ki|xếp loại|xep loai|"
-    r"học lực|hoc luc|học sinh giỏi|xuất sắc|lên lớp|len lop|"
+    r"dtb|diem trung binh|thuong xuyen|giua k[iy]|cuoi k[iy]|xep loai|"
+    r"hoc luc|hoc sinh gioi|xuat sac|len lop|"
     # "được danh hiệu gì" là cách hỏi xếp loại thông dụng nhất mà không có chữ
     # "xếp loại" nào trong câu.
-    r"danh hiệu|danh hieu|khen thưởng|giấy khen|điểm các môn|diem cac mon",
-    re.IGNORECASE,
+    r"danh hieu|khen thuong|giay khen|diem cac mon"
 )
 
 # Cổng 2 - câu hỏi về QUY ĐỊNH chứ không phải về một con số.
 TU_KHOA_TRA_CUU = re.compile(
-    r"quy định (?:ở đâu|tại đâu|thế nào|như thế nào)|căn cứ nào|văn bản nào|"
-    r"điều nào|thủ tục|hồ sơ|trách nhiệm|ai (?:đánh giá|quyết định)|"
-    r"có hiệu lực|khác gì|so với thông tư",
-    re.IGNORECASE,
+    r"quy dinh (?:o dau|tai dau|the nao|nhu the nao)|can cu nao|van ban nao|"
+    r"dieu nao|thu tuc|ho so|trach nhiem|ai (?:danh gia|quyet dinh)|"
+    r"co hieu luc|khac gi|so voi thong tu"
 )
 
 MAU_THUONG_XUYEN = re.compile(
-    r"(?:thường xuyên|thuong xuyen|đgtx|ddgtx|tx)\s*[:=]?\s*"
-    r"((?:\d{1,2}(?:[.,]\d)?\s*[,;+và ]*)+)",
-    re.IGNORECASE,
+    r"(?:thuong xuyen|dgtx|ddgtx|tx)\s*[:=]?\s*"
+    r"((?:\d{1,2}(?:[.,]\d)?\s*[,;+va ]*)+)"
 )
-MAU_GIUA_KI = re.compile(
-    r"giữa\s*k[iìỳy]\s*[:=]?\s*(\d{1,2}(?:[.,]\d)?)", re.IGNORECASE
-)
-MAU_CUOI_KI = re.compile(
-    r"cuối\s*k[iìỳy]\s*[:=]?\s*(\d{1,2}(?:[.,]\d)?)", re.IGNORECASE
-)
+MAU_GIUA_KI = re.compile(r"giua\s*k[iy]\s*[:=]?\s*(\d{1,2}(?:[.,]\d)?)")
+MAU_CUOI_KI = re.compile(r"cuoi\s*k[iy]\s*[:=]?\s*(\d{1,2}(?:[.,]\d)?)")
 MAU_HOC_KI_1 = re.compile(
-    r"(?:học\s*k[iìỳy]\s*(?:i|1|một)|hk\s*1|hki)\s*[:=]?\s*(\d{1,2}(?:[.,]\d)?)",
-    re.IGNORECASE,
+    r"(?:hoc\s*k[iy]\s*(?:i|1|mot)|hk\s*1|hki)\s*[:=]?\s*(\d{1,2}(?:[.,]\d)?)"
 )
 MAU_HOC_KI_2 = re.compile(
-    r"(?:học\s*k[iìỳy]\s*(?:ii|2|hai)|hk\s*2|hkii)\s*[:=]?\s*(\d{1,2}(?:[.,]\d)?)",
-    re.IGNORECASE,
+    r"(?:hoc\s*k[iy]\s*(?:ii|2|hai)|hk\s*2|hkii)\s*[:=]?\s*(\d{1,2}(?:[.,]\d)?)"
 )
 MAU_CAC_MON = re.compile(
-    r"(?:điểm|diem)\s*(?:các\s*môn|cac\s*mon|\d+\s*môn)\s*[:=]?\s*"
-    r"((?:\d{1,2}(?:[.,]\d)?\s*[,;và ]*)+)",
-    re.IGNORECASE,
+    r"diem\s*(?:cac\s*mon|\d+\s*mon)\s*[:=]?\s*"
+    r"((?:\d{1,2}(?:[.,]\d)?\s*[,;va ]*)+)"
 )
 
 
@@ -347,12 +342,14 @@ class ThamSo:
 def nhan_dien(cau_hoi: str) -> ThamSo | None:
     """Đọc câu hỏi thành tham số tính điểm; None nghĩa là không đủ số liệu để
     tính, hoặc đây là câu tra cứu quy định."""
-    if not cau_hoi or TU_KHOA_TRA_CUU.search(cau_hoi):
+    if not cau_hoi:
         return None
-    if not TU_KHOA_DIEM.search(cau_hoi):
+    thap = bo_dau(cau_hoi)
+    if TU_KHOA_TRA_CUU.search(thap):
+        return None
+    if not TU_KHOA_DIEM.search(thap):
         return None
 
-    thap = cau_hoi.lower()
 
     # Dạng 1 - tính ĐTBmhk từ các điểm thành phần.
     tx = MAU_THUONG_XUYEN.search(thap)
@@ -385,12 +382,12 @@ def nhan_dien(cau_hoi: str) -> ThamSo | None:
         day = _day_so(mon.group(1))
         if len(day) >= SO_MON_TOI_THIEU:
             ts = ThamSo(dang="xep_loai", diem_cac_mon=day)
-            m = re.search(r"(\d+)\s*môn\s*(?:nhận xét\s*)?chưa đạt", thap)
+            m = re.search(r"(\d+)\s*mon\s*(?:nhan xet\s*)?chua dat", thap)
             if m:
                 ts.mon_nhan_xet_chua_dat = int(m.group(1))
-            m = re.search(r"rèn luyện\s*(?:mức\s*)?(tốt|khá|đạt|chưa đạt)", thap)
+            m = re.search(r"ren luyen\s*(?:muc\s*)?(chua dat|tot|kha|dat)", thap)
             if m:
-                ts.ren_luyen = m.group(1).capitalize().replace("Chưa đạt", "Chưa đạt")
+                ts.ren_luyen = MUC_TU_KHONG_DAU[m.group(1)]
             return ts
 
     return None

@@ -31,7 +31,7 @@ from dataclasses import dataclass, field
 
 # CanCu và chip nguồn nằm ở can_cu_van_ban.py vì công cụ tính định mức tiết dạy
 # cũng cần đúng hai thứ đó. Vẫn xuất lại tên ở đây để chỗ gọi cũ không phải đổi.
-from can_cu_van_ban import CanCu, nguon_tu_can_cu, ten_tep_that
+from can_cu_van_ban import CanCu, bo_dau, nguon_tu_can_cu, ten_tep_that
 
 
 # ============================================================
@@ -451,37 +451,41 @@ def _gom_can_cu(kq: KetQua) -> list[CanCu]:
 # Chỉ nhận khi câu hỏi vừa NÓI VỀ LƯƠNG vừa đủ tham số để tính. Thiếu một trong
 # hai thì trả None để câu hỏi đi tiếp đường RAG bình thường - công cụ này chen
 # ngang một câu tra cứu quy định thì tệ hơn hẳn việc không chen.
+#
+# MỌI MẪU TỪ ĐÂY TRỞ XUỐNG VIẾT KHÔNG DẤU: câu hỏi đi qua bo_dau() trước khi so,
+# nên một mẫu có dấu sẽ không bao giờ khớp nữa. Đổi lại, người gõ "tinh luong
+# giao vien THPT hang III bac 1" và người gõ đủ dấu đi chung một đường - trước
+# đây phải chép tay hai biến thể cho từng cụm, và chỉ cần quên một cụm là cả
+# câu rơi khỏi cổng nhận.
 TU_KHOA_TINH = re.compile(
-    r"tính|bao nhiêu|thực lĩnh|thực nhận|lĩnh bao nhiêu|tổng lương|"
-    r"tổng thu nhập|lương của tôi|nhận được|ra lương",
-    re.IGNORECASE,
+    r"tinh|bao nhieu|thuc linh|thuc nhan|linh bao nhieu|tong luong|"
+    r"tong thu nhap|luong cua toi|nhan duoc|ra luong"
 )
-TU_KHOA_LUONG = re.compile(r"lương|thu nhập|phụ cấp|thực lĩnh", re.IGNORECASE)
+TU_KHOA_LUONG = re.compile(r"luong|thu nhap|phu cap|thuc linh")
 
 # Câu hỏi về QUY ĐỊNH, không phải về số tiền. Có mấy chữ này thì nhường đường
 # cho RAG kể cả khi câu có đủ hạng và bậc: "điều kiện thăng hạng giáo viên THPT
 # hạng II là gì" cần trích văn bản, không cần một phiếu lương.
 TU_KHOA_TRA_CUU = re.compile(
-    r"tiêu chuẩn|trình độ|điều kiện|thăng hạng|bổ nhiệm|nhiệm vụ|chứng chỉ|"
-    r"quy định (?:ở đâu|tại đâu|thế nào|như thế nào)|căn cứ nào|văn bản nào",
-    re.IGNORECASE,
+    r"tieu chuan|trinh do|dieu kien|thang hang|bo nhiem|nhiem vu|chung chi|"
+    r"quy dinh (?:o dau|tai dau|the nao|nhu the nao)|can cu nao|van ban nao"
 )
 
 CAP_HOC_MAU = [
-    ("thpt", r"thpt|trung học phổ thông|trung hoc pho thong|cấp 3|cấp ba"),
-    ("thcs", r"thcs|trung học cơ sở|trung hoc co so|cấp 2|cấp hai"),
-    ("tieu_hoc", r"tiểu học|tieu hoc|cấp 1|cấp một"),
-    ("mam_non", r"mầm non|mam non|mẫu giáo"),
-    ("du_bi_dh", r"dự bị đại học|du bi dai hoc"),
-    ("giang_vien", r"giảng viên|giang vien"),
+    ("thpt", r"thpt|trung hoc pho thong|cap 3|cap ba"),
+    ("thcs", r"thcs|trung hoc co so|cap 2|cap hai"),
+    ("tieu_hoc", r"tieu hoc|cap 1|cap mot"),
+    ("mam_non", r"mam non|mau giao"),
+    ("du_bi_dh", r"du bi dai hoc"),
+    ("giang_vien", r"giang vien"),
 ]
 
 # "hạng I" phải khớp SAU "hạng II" và "hạng III", nếu không "hạng III" bị đọc
 # nhầm thành hạng I. Thứ tự danh sách này chính là thứ tự thử.
 HANG_MAU = [
-    ("III", r"hạng\s*(?:iii|3|ba)\b"),
-    ("II", r"hạng\s*(?:ii|2|hai)\b"),
-    ("I", r"hạng\s*(?:i|1|một|nhất)\b"),
+    ("III", r"hang\s*(?:iii|3|ba)\b"),
+    ("II", r"hang\s*(?:ii|2|hai)\b"),
+    ("I", r"hang\s*(?:i|1|mot|nhat)\b"),
 ]
 
 
@@ -492,23 +496,23 @@ def _so_thap_phan(chuoi: str) -> float:
 def nhan_dien(cau_hoi: str) -> ThamSo | None:
     """Đọc câu hỏi thành tham số tính lương; None nghĩa là không phải câu tính
     lương, hoặc thiếu tham số nên không tính nổi."""
-    if not cau_hoi or TU_KHOA_TRA_CUU.search(cau_hoi):
+    if not cau_hoi or TU_KHOA_TRA_CUU.search(bo_dau(cau_hoi)):
         return None
 
-    thap = cau_hoi.lower()
+    thap = bo_dau(cau_hoi)
 
     # Một HỆ SỐ CỤ THỂ tự nó đã đủ cả hai điều kiện dưới đây. Trong kho văn bản
     # giáo dục, "hệ số" viết kèm hai chữ số thập phân chỉ có một nghĩa là hệ số
     # lương, và không ai đưa con số đó vào câu hỏi tra cứu quy định - nó là tham
     # số của phép tính. Nhờ vậy "GV THPT hạng III bậc 1, hệ số 2,34" vẫn tính
     # được dù trong câu không có chữ "lương" nào.
-    co_he_so_ro = bool(re.search(r"hệ\s*số\s*(?:lương\s*)?\d[.,]\d{1,2}", thap))
+    co_he_so_ro = bool(re.search(r"he\s*so\s*(?:luong\s*)?\d[.,]\d{1,2}", thap))
 
     # Cổng 1 - câu này có thuộc chuyện tiền lương không.
-    if not co_he_so_ro and not TU_KHOA_LUONG.search(cau_hoi):
+    if not co_he_so_ro and not TU_KHOA_LUONG.search(thap):
         return None
     # Cổng 2 - người dùng có muốn một CON SỐ không, hay chỉ hỏi quy định.
-    if not co_he_so_ro and not TU_KHOA_TINH.search(cau_hoi):
+    if not co_he_so_ro and not TU_KHOA_TINH.search(thap):
         return None
 
     cap_hoc = next((k for k, mau in CAP_HOC_MAU if re.search(mau, thap)), None)
@@ -524,14 +528,14 @@ def nhan_dien(cau_hoi: str) -> ThamSo | None:
         return None
 
     bac = None
-    m = re.search(r"bậc\s*(?:lương\s*)?(\d{1,2})", thap)
+    m = re.search(r"bac\s*(?:luong\s*)?(\d{1,2})", thap)
     if m:
         so = int(m.group(1))
         if 1 <= so <= cd.bang.so_bac:
             bac = so
 
     he_so = None
-    m = re.search(r"hệ\s*số\s*(?:lương\s*)?(\d[.,]\d{1,2})", thap)
+    m = re.search(r"he\s*so\s*(?:luong\s*)?(\d[.,]\d{1,2})", thap)
     if m:
         he_so = _so_thap_phan(m.group(1))
     else:
@@ -549,26 +553,26 @@ def nhan_dien(cau_hoi: str) -> ThamSo | None:
 
     ts = ThamSo(chuc_danh=cd, bac=bac, he_so=he_so)
 
-    if re.search(r"đặc biệt khó khăn|dac biet kho khan", thap):
+    if re.search(r"dac biet kho khan", thap):
         ts.dia_ban = "dac_biet_kho_khan"
-    elif re.search(r"trường chuyên|nội trú|noi tru", thap):
+    elif re.search(r"truong chuyen|noi tru", thap):
         ts.dia_ban = "chuyen_noi_tru"
-    elif re.search(r"khu vực i{1,2}\b|vùng dân tộc|miền núi|biên giới|hải đảo", thap):
+    elif re.search(r"khu vuc i{1,2}\b|vung dan toc|mien nui|bien gioi|hai dao", thap):
         ts.dia_ban = "kv1_kv2"
 
-    m = re.search(r"ưu đãi\s*(\d{1,2})\s*%", thap)
+    m = re.search(r"uu dai\s*(\d{1,2})\s*%", thap)
     if m:
         ts.pc_uu_dai = int(m.group(1)) / 100
 
-    m = re.search(r"chức vụ\s*(?:lãnh đạo\s*)?(\d[.,]\d{1,2})", thap)
+    m = re.search(r"chuc vu\s*(?:lanh dao\s*)?(\d[.,]\d{1,2})", thap)
     if m:
         ts.he_so_chuc_vu = _so_thap_phan(m.group(1))
 
-    m = re.search(r"vượt khung\s*(\d{1,2})\s*%", thap)
+    m = re.search(r"vuot khung\s*(\d{1,2})\s*%", thap)
     if m:
         ts.ty_le_vuot_khung = int(m.group(1)) / 100
 
-    m = re.search(r"thâm niên\s*(?:nhà giáo\s*)?(\d{1,2})\s*%", thap)
+    m = re.search(r"tham nien\s*(?:nha giao\s*)?(\d{1,2})\s*%", thap)
     if m:
         ts.ty_le_tham_nien = int(m.group(1)) / 100
 

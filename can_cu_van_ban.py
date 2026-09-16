@@ -37,6 +37,30 @@ class CanCu:
         return f"{self.van_ban}, {self.dieu_khoan}"
 
 
+# ============================================================
+# CHUẨN HÓA CÂU HỎI
+# ============================================================
+def bo_dau(chuoi: str) -> str:
+    """Bỏ dấu tiếng Việt và hạ chữ thường, để so mẫu không phụ thuộc bộ gõ.
+
+    Người dùng gõ "tinh luong giao vien THPT hang III bac 1" nhiều không kém
+    gõ có dấu - trên điện thoại, trên máy chưa cài bộ gõ, hoặc chỉ vì gõ nhanh.
+    Trước đây mỗi công cụ tự liệt kê hai biến thể cho từng cụm từ ("trung học
+    phổ thông|trung hoc pho thong"), vừa dài vừa bỏ sót: chỉ cần quên một cụm -
+    thường là mấy chữ dẫn như "tính", "giữa kì" - là cả câu rơi khỏi cổng nhận.
+
+    Bỏ dấu một lần rồi viết mẫu không dấu thì cả hai cách gõ đi chung một đường.
+    Đổi lại, mọi mẫu so khớp phải viết KHÔNG DẤU - mẫu có dấu sẽ không bao giờ
+    khớp nữa, vì chuỗi đem so đã sạch dấu.
+
+    Chữ đ không phân rã được bằng NFD nên phải thay tay; đây cũng là chữ hay
+    gặp nhất trong kho văn bản giáo dục ("điều", "đánh giá", "định mức").
+    """
+    chuoi = unicodedata.normalize("NFD", chuoi)
+    chuoi = "".join(c for c in chuoi if unicodedata.category(c) != "Mn")
+    return chuoi.replace("đ", "d").replace("Đ", "D").lower()
+
+
 def _thu_muc_kho() -> str:
     return os.path.abspath(os.getenv(
         "RAG_DATA_PATH",
