@@ -162,7 +162,7 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width:
 }
 
 .app-shell { display: grid; grid-template-columns: 292px minmax(0, 1fr); height: 100dvh; }
-.sidebar { position: relative; z-index: 20; display: flex; flex-direction: column; min-width: 0; padding: 26px 20px 18px; background: var(--sidebar); border-right: 1px solid var(--line); }
+.sidebar { position: relative; z-index: 20; display: flex; flex-direction: column; min-width: 0; overflow-y: auto; padding: 26px 20px 18px; background: var(--sidebar); border-right: 1px solid var(--line); }
 .brand { display: flex; align-items: center; gap: 12px; padding: 0 7px; }
 .brand-mark { display: grid; place-items: center; width: 42px; height: 42px; color: white; background: var(--navy); border-radius: 13px; box-shadow: 0 8px 18px rgba(23, 49, 95, .2); }
 .brand-mark svg { width: 26px; height: 26px; stroke-width: 1.7; }
@@ -184,7 +184,7 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width:
 .history-search:focus-within { border-color: var(--blue-line); box-shadow: 0 0 0 3px var(--ring); }
 .history-search svg { flex: 0 0 auto; width: 15px; height: 15px; color: var(--ink-mute); }
 .history-search input { width: 100%; min-width: 0; color: var(--ink); background: transparent; border: 0; outline: 0; font: inherit; font-size: 12.5px; }
-.history-list { min-height: 40px; overflow: auto; }
+.history-list { flex: 1 1 auto; min-height: 40px; overflow: auto; }
 .history-empty { padding: 12px 8px; color: var(--ink-faint); font-size: 13px; line-height: 1.5; }
 .history-item mark { padding: 0 1px; color: inherit; background: var(--warn-line); border-radius: 3px; }
 .history-row { position: relative; }
@@ -201,7 +201,7 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width:
 .history-item:hover, .history-item.active { background: var(--wash); }
 .history-item svg { flex: 0 0 auto; width: 16px; height: 16px; color: var(--ink-mute); }
 .history-item span { overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
-.sidebar-footer { margin-top: auto; min-height: 0; overflow-y: auto; padding-top: 18px; }
+.sidebar-footer { flex: 0 0 auto; margin-top: auto; padding-top: 18px; }
 .system-card { padding: 14px; background: var(--wash-strong); border: 1px solid var(--line); border-radius: 13px; }
 .status-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
 .status-dot, .mini-dot { display: inline-block; flex: 0 0 auto; width: 8px; height: 8px; background: var(--warn); border-radius: 50%; box-shadow: 0 0 0 3px rgba(226, 167, 40, .13); }
@@ -291,6 +291,12 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width:
 .eyebrow { margin: 0 0 12px; color: var(--blue); font-size: 11px; font-weight: 800; letter-spacing: .15em; }
 h1 { margin: 0; color: var(--ink); font-family: Cambria, "Times New Roman", serif; font-size: clamp(34px, 4.5vw, 48px); font-weight: 500; line-height: 1.12; letter-spacing: -.02em; }
 .welcome-copy { max-width: 610px; margin: 18px auto 31px; color: var(--ink-soft); font-size: 14px; line-height: 1.65; }
+.welcome-credit { max-width: 640px; margin: -12px auto 30px; padding: 13px 18px; background: var(--wash-strong); border: 1px solid var(--line); border-radius: 13px; }
+.welcome-credit p { margin: 0; }
+.welcome-credit-org { color: var(--ink-body); font-size: 12px; font-weight: 700; line-height: 1.5; }
+.welcome-credit-line { margin-top: 5px !important; color: var(--ink-mute); font-size: 11.5px; line-height: 1.6; }
+.welcome-credit-line span { color: var(--ink-mute); }
+.welcome-credit-line strong { color: var(--ink-body); font-weight: 650; }
 .suggestion-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; text-align: left; }
 .suggestion-card { display: grid; grid-template-columns: 43px minmax(0, 1fr) 18px; align-items: center; gap: 12px; padding: 15px; background: var(--surface); border: 1px solid var(--line); border-radius: 15px; cursor: pointer; box-shadow: 0 3px 12px var(--hover-wash); transition: border-color .18s, box-shadow .18s, transform .18s; }
 .suggestion-card:hover { border-color: var(--line-strong); box-shadow: var(--shadow); transform: translateY(-2px); }
