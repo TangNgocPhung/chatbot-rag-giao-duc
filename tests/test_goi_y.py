@@ -192,6 +192,39 @@ class GoiYTheoNoiDungTraLoiTests(unittest.TestCase):
         self.assertFalse(any("37/2021" in cau for cau in goi_y))
         self.assertFalse(any("sgk-tin-hoc" in cau for cau in goi_y))
 
+    def test_hoi_mon_tin_hoc_khong_goi_y_thong_tu_thiet_bi_lac_de(self):
+        # Câu trả lời thật: trích cả Thông tư 37 về thiết bị dạy học tiểu học,
+        # nhắc "Nhà xuất bản Giáo dục Việt Nam" và giải nghĩa ICT/CS trong ngoặc.
+        tra_loi = (
+            "Dựa trên **cấu trúc và định hướng** của môn Tin học tại bậc THPT "
+            "(từ lớp 10 trở lên):\n"
+            "- Nội dung được tổ chức thành ICT (Tin học ứng dụng) và CS "
+            "(Khoa học máy tính). [4]\n"
+            "- Sách giáo khoa thuộc bộ của Nhà xuất bản Giáo dục Việt Nam. [4]\n"
+            "- Danh mục thiết bị dạy học tối thiểu cấp Tiểu học không liệt kê "
+            "chi tiết nội dung Tin học. [1]"
+        )
+        nguon = [
+            {
+                "name": "thong-tu-37-2021-tt-bgddt-bo-giao-duc-va-dao-tao.doc",
+                "van_ban": {"so_hieu": "37/2021/TT-BGDĐT", "loai": "Thông tư"},
+                "article": "Điều 1. Ban hành kèm theo Thông tư này Danh mục thiết bị",
+            },
+            {"name": "11-sgk-tin-hoc-11-dinh-huong-tin-hoc-ung-dung.pdf"},
+            {"name": "12-sgk-tin-hoc-12-dinh-huong-tin-hoc-ung-dung.pdf"},
+            {"name": "11-sgk-tin-hoc-11-dinh-huong-khoa-hoc-may-tinh.pdf"},
+        ]
+        goi_y = goi_y_cau_hoi.goi_y_tiep_theo(
+            "Môn tin học là môn như thế nào", nguon, cau_tra_loi=tra_loi
+        )
+        self.assertEqual(
+            goi_y[:2],
+            ["Nói rõ hơn về tin học ứng dụng",
+             "Tài liệu còn nói gì thêm về khoa học máy tính?"],
+        )
+        self.assertFalse(any("37/2021" in cau or "Việt Nam" in cau for cau in goi_y))
+        self.assertFalse(any("lớp 10" in cau for cau in goi_y))
+
     def test_dau_cau_viet_hoa_khong_bi_coi_la_ten_rieng(self):
         y_chinh = goi_y_cau_hoi.rut_y_chinh("Học sinh được học hai buổi. Giáo viên dạy.")
         self.assertEqual(y_chinh, [])

@@ -12,6 +12,7 @@ from __future__ import annotations
 import os
 import random
 import re
+import unicodedata
 
 
 SO_GOI_Y_MO_DAU = 6
@@ -205,6 +206,21 @@ _CUM_BO_QUA = (
 _IN_DAM = re.compile(r"\*\*([^*\n]{3,60})\*\*")
 _DAU_MUC = re.compile(r"^\s*(?:[-*+•]|\d+[.)])\s+([^:\n]{3,50}):", re.MULTILINE)
 _TRICH_DAN = re.compile(r"\[(\d{1,2})\]")
+# "ICT (Tin học ứng dụng)": viết tắt rồi mở ngoặc giải nghĩa - gần như chắc chắn
+# là thuật ngữ chính của câu trả lời.
+_VIET_TAT_GIAI_NGHIA = re.compile(r"\b[A-ZĐ]{2,6}\s*\(([^()\n]{3,40})\)")
+_TRONG_NGOAC_KEP = re.compile(r"[\"“]([^\"”\n]{6,50})[\"”]")
+# Tên riêng hay gặp trong câu trả lời nhưng hỏi tiếp về nó thì chẳng ai cần.
+_TEN_RIENG_CHUNG = {
+    "việt nam", "nhà xuất bản", "giáo dục việt nam", "bộ giáo dục", "chính phủ",
+    "quốc hội", "thủ tướng", "thủ tướng chính phủ", "đào tạo", "giáo dục và đào tạo",
+}
+# Chữ hỏi và chữ đệm: bỏ đi thì phần còn lại của câu hỏi mới là chủ đề.
+_TU_HOI = {
+    "là", "gì", "như", "thế", "nào", "ra", "sao", "có", "không", "những", "các",
+    "về", "của", "được", "và", "trong", "cho", "bao", "nhiêu", "môn", "hãy", "cho",
+    "biết", "tôi", "em", "mình", "ở", "với", "thì", "này", "đó", "hỏi", "nêu",
+}
 _SO_Y_CHINH_TOI_DA = 3
 _MA_HIEU_LUC_CAN_HOI = {"bi_thay_the", "bi_sua_doi", "doan_sua_doi", "chua_hieu_luc", "du_thao"}
 
@@ -257,10 +273,17 @@ def rut_y_chinh(cau_tra_loi: str, cau_hoi: str = "") -> list[tuple[str, bool]]:
     cau_hoi_chuan = _chuan_hoa(cau_hoi)
     ung_vien: list[tuple[str, bool]] = []
 
+    for khop in _VIET_TAT_GIAI_NGHIA.finditer(van_ban):
+        # "THPT (từ lớp 10 trở lên)" là chú thích phạm vi, không phải tên thuật
+        # ngữ; tên giải nghĩa thật luôn viết hoa chữ đầu.
+        if khop.group(1)[0].isupper():
+            ung_vien.append((khop.group(1).strip(" :.,;"), False))
     for khop in _IN_DAM.finditer(van_ban):
         ung_vien.append((khop.group(1).strip(" :.,;"), False))
     for khop in _DAU_MUC.finditer(van_ban):
         ung_vien.append((khop.group(1).replace("**", "").strip(" :.,;"), False))
+    for khop in _TRONG_NGOAC_KEP.finditer(van_ban):
+        ung_vien.append((khop.group(1).strip(" :.,;"), False))
 
     # Tên riêng: đứng đầu câu thì chữ đầu viết hoa là chuyện ngữ pháp, nên cụm
     # chỉ đứng đầu câu phải xuất hiện ít nhất hai lần mới tính.
@@ -271,8 +294,13 @@ def rut_y_chinh(cau_tra_loi: str, cau_hoi: str = "") -> list[tuple[str, bool]]:
         if o_giua:
             giua_cau.add(cum)
     for cum, so_lan in sorted(dem.items(), key=lambda muc: -muc[1]):
-        if cum in giua_cau or so_lan >= 2:
+        if (cum in giua_cau or so_lan >= 2) and cum.casefold() not in _TEN_RIENG_CHUNG:
             ung_vien.append((cum, True))
+    # Cụm nào chạm đúng chủ đề câu hỏi ("Tin học ứng dụng" khi hỏi về môn tin
+    # học) được đưa lên trước; sort ổn định nên thứ tự còn lại giữ nguyên.
+    chu_de = _cap_tu_chu_de(cau_hoi)
+    if chu_de:
+        ung_vien.sort(key=lambda muc: not (_cap_tu(muc[0]) & chu_de))
 
     ket_qua: list[tuple[str, bool]] = []
     da_thay: list[str] = []
@@ -304,6 +332,40 @@ def _cau_hoi_tu_y_chinh(y_chinh: list[tuple[str, bool]]) -> list[str]:
             cum = cum[0].lower() + cum[1:]
         cau_hoi.append(mau[so % len(mau)].format(cum))
     return cau_hoi
+
+
+def _bo_dau(van_ban: str) -> str:
+    van_ban = str(van_ban or "").casefold().replace("đ", "d")
+    return "".join(
+        ky_tu for ky_tu in unicodedata.normalize("NFD", van_ban)
+        if unicodedata.category(ky_tu) != "Mn"
+    )
+
+
+def _cap_tu(van_ban: str) -> set[str]:
+    """Các cặp âm tiết liền nhau, bỏ dấu - đủ để "tin học" khớp cả tên tệp
+    "11-sgk-tin-hoc-11" mà không để một chữ "học" đứng riêng khớp mọi thứ."""
+    tu = re.findall(r"[^\W_]+", _bo_dau(van_ban))
+    return {f"{a} {b}" for a, b in zip(tu, tu[1:])}
+
+
+def _cap_tu_chu_de(cau_hoi: str) -> set[str]:
+    tu = [
+        tu for tu in re.findall(r"[^\W_]+", str(cau_hoi or "").casefold())
+        if tu not in _TU_HOI
+    ]
+    return _cap_tu(" ".join(tu)) if len(tu) >= 2 else set()
+
+
+def _nguon_lien_quan(nguon: dict, chu_de: set[str]) -> bool:
+    """Tên tài liệu có chạm chủ đề câu hỏi không. Chỉ xét tên chứ không xét đoạn
+    trích: Điều 1 của một thông tư về thiết bị dạy học liệt kê đủ mọi môn, nên
+    đoạn trích nào cũng "có nhắc tới" môn đang hỏi."""
+    van_ban = nguon.get("van_ban") or {}
+    ten = " ".join(filter(None, [
+        nguon.get("name"), van_ban.get("trich_yeu"), van_ban.get("ten"),
+    ]))
+    return bool(_cap_tu(ten) & chu_de)
 
 
 def _nguon_duoc_trich(cac_nguon: list[dict], cau_tra_loi: str) -> list[dict]:
@@ -353,9 +415,18 @@ def goi_y_tiep_theo(
             else:
                 ung_vien.append(cau)
     tu_y_chinh = _cau_hoi_tu_y_chinh(rut_y_chinh(cau_tra_loi, cau_hoi))
-    # Có ý chính thì chỉ để một câu hỏi theo Điều chen vào, tránh ba chỗ gợi ý
-    # đều là "Điều n của ... quy định chi tiết những gì?".
     if tu_y_chinh:
+        # Đã có ý chính bám câu trả lời thì câu hỏi theo Điều chỉ được chen vào
+        # khi văn bản đó đúng chủ đề đang hỏi: hỏi môn tin học mà gợi ý "Điều 1
+        # của Thông tư về thiết bị dạy học tiểu học" là lạc đề.
+        chu_de = _cap_tu_chu_de(cau_hoi)
+        lien_quan = [n for n in cac_nguon if chu_de and _nguon_lien_quan(n, chu_de)]
+        if chu_de:
+            ten_lien_quan = {_ten_goi(n) for n in lien_quan}
+            ung_vien = [
+                cau for cau in ung_vien if any(ten in cau for ten in ten_lien_quan)
+            ]
+        cac_nguon = lien_quan if chu_de else cac_nguon
         ung_vien = canh_bao_hieu_luc + tu_y_chinh[:2] + ung_vien[:1] + tu_y_chinh[2:]
     else:
         ung_vien = tu_nguon
