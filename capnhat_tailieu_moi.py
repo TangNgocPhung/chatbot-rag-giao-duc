@@ -171,12 +171,40 @@ def main(bao_tien_do=None):
 
     file_bi_xoa = [d for d in so_ghi_chep.keys() if d not in hash_hien_tai]
 
+    # Sổ chỉ ghi size/modified_ns lúc file được embed, nên file "không đổi" giữ
+    # mãi dấu thời gian của máy đã lập chỉ mục lần đầu. Chép kho sang máy khác
+    # (tar và zip chỉ giữ mtime tới giây) làm dấu này lệch dù nội dung y nguyên,
+    # và giao diện - vốn so size + modified_ns chứ không băm lại - sẽ báo "Chờ
+    # cập nhật" vĩnh viễn: hash khớp nên lần chạy nào cũng thấy không có việc để
+    # làm. Làm tươi ngay tại đây để sổ mô tả đúng tệp đang nằm trên đĩa.
+    so_lam_tuoi = 0
+    for duong_dan in file_khong_doi:
+        ban_ghi = so_ghi_chep[duong_dan]
+        try:
+            thong_tin = os.stat(duong_dan)
+        except OSError:
+            continue
+        if (
+            ban_ghi.get("size") != thong_tin.st_size
+            or ban_ghi.get("modified_ns") != thong_tin.st_mtime_ns
+        ):
+            ban_ghi["size"] = thong_tin.st_size
+            ban_ghi["modified_ns"] = thong_tin.st_mtime_ns
+            so_lam_tuoi += 1
+
     print(f"\n🆕 File mới:      {len(file_moi)}")
     print(f"✏️  File bị sửa:   {len(file_sua_doi)}")
     print(f"🗑️  File bị xóa:   {len(file_bi_xoa)}")
     print(f"✅ File không đổi: {len(file_khong_doi)}")
 
+    if so_lam_tuoi:
+        print(f"   Đã làm tươi dấu thời gian cho {so_lam_tuoi} file không đổi nội dung.")
+
     if not file_moi and not file_sua_doi and not file_bi_xoa:
+        # Không có gì để embed, nhưng dấu thời gian vừa làm tươi vẫn phải ghi
+        # xuống đĩa, nếu không lần chạy sau lại lệch y như cũ.
+        if so_lam_tuoi:
+            luu_so_ghi_chep(so_ghi_chep)
         print("\n✅ Không có thay đổi nào. Kho tri thức đã cập nhật đầy đủ.")
         bao(
             stage="complete", label="Kho tri thức đã cập nhật", percent=100,

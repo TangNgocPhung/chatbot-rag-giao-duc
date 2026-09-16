@@ -70,6 +70,22 @@ THU_MUC_TEP_TRONG_KHO = "" if KHO_PHANG else os.getenv(
 )
 
 
+# tar và zip chỉ giữ mtime tới giây (zip tới 2 giây), nên chép kho sang máy
+# khác - đẩy lên VPS chẳng hạn - làm lệch phần lẻ dù nội dung y nguyên. So
+# đúng từng nano giây thì cả kho bị coi là "chờ cập nhật" vĩnh viễn: trình cập
+# nhật so bằng hash nên thấy không có gì để làm, sổ không được ghi lại, con số
+# đứng yên mãi. Chỉ coi là khác khi lệch quá mốc này.
+DUNG_SAI_MTIME_NS = 2_000_000_000
+
+
+def ban_ghi_lech_tep(record: dict, size: int, modified_ns: int) -> bool:
+    """Bản ghi trong sổ có còn mô tả đúng tệp đang nằm trên đĩa không."""
+    if record.get("size") is not None and record["size"] != size:
+        return True
+    ghi_nhan = record.get("modified_ns")
+    return ghi_nhan is not None and abs(ghi_nhan - modified_ns) >= DUNG_SAI_MTIME_NS
+
+
 def _luu_tep_dinh_kem_vao_kho() -> bool:
     return os.getenv("RAG_LUU_TEP_DINH_KEM", "1") == "1"
 
@@ -356,14 +372,7 @@ class RAGService:
         data_stale = set(files) != set(ledger)
         if not data_stale:
             for path, (size, modified_ns) in files.items():
-                record = ledger[path]
-                if record.get("size") is not None and record["size"] != size:
-                    data_stale = True
-                    break
-                if (
-                    record.get("modified_ns") is not None
-                    and record["modified_ns"] != modified_ns
-                ):
+                if ban_ghi_lech_tep(ledger[path], size, modified_ns):
                     data_stale = True
                     break
 
@@ -1074,13 +1083,7 @@ class RAGService:
             status = "pending"
             if record:
                 status = record.get("status", "processed")
-                if (
-                    (record.get("size") is not None and record["size"] != stat.st_size)
-                    or (
-                        record.get("modified_ns") is not None
-                        and record["modified_ns"] != stat.st_mtime_ns
-                    )
-                ):
+                if ban_ghi_lech_tep(record, stat.st_size, stat.st_mtime_ns):
                     status = "pending"
             if status not in status_counts:
                 status = "pending"

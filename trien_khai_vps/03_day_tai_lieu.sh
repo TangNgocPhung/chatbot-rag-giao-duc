@@ -79,7 +79,9 @@ day_mot_me() {
   [ "$me_file" -eq 0 ] && return 0
   me_so=$(( me_so + 1 ))
   printf "\n[Me %d] %d file, %.1f MB ... " "$me_so" "$me_file" "$(awk -v b="$me_byte" 'BEGIN{print b/1048576}')"
-  tar -cf - -C "$THU_MUC_CUC_BO" --null -T "$TAM/me_list" \
+  # --format=posix giu mtime toi nano giay: dinh dang mac dinh cat mat phan
+  # le giay, the la so ghi chep het khop va kho hien "Cho cap nhat".
+  tar -cf - --format=posix -C "$THU_MUC_CUC_BO" --null -T "$TAM/me_list" \
     | $SSH "sudo -u rag tar -xf - -C '$THU_MUC_XA'"
   DA_GUI_BYTE=$(( DA_GUI_BYTE + me_byte ))
   troi_qua=$(( $(date +%s) - BAT_DAU ))

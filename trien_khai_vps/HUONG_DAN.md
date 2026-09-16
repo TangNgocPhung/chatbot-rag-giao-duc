@@ -149,9 +149,19 @@ ufw, fail2ban, người dùng `rag`, dịch vụ `chatbot-rag`. Mất 20–30 ph
 bash trien_khai_vps/02_day_ma_nguon.sh <IP_VPS> debian
 ```
 
-Đẩy mã nguồn + chỉ mục FAISS (~150 MB) + mật khẩu từ `mat_khau.bat`, cài thư
-viện, khởi động, chờ nạp xong kho tri thức.
-→ `https://chatbot.<IP-VPS>.sslip.io`
+Đẩy mã nguồn + mật khẩu từ `mat_khau.bat`, cài thư viện, khởi động, chờ nạp
+xong kho tri thức. → `https://chatbot.<IP-VPS>.sslip.io`
+
+Lần **đầu tiên** — VPS chưa có chỉ mục nào — phải đẩy kèm sổ ghi chép và FAISS,
+nếu không máy chủ sẽ embed lại cả kho mất nhiều giờ CPU:
+
+```bash
+DAY_CHI_MUC=1 bash trien_khai_vps/02_day_ma_nguon.sh <IP_VPS> root
+```
+
+Những lần sau **để mặc định** (không đặt `DAY_CHI_MUC`): chỉ mã nguồn được đẩy,
+còn `data_giao_duc_da_xu_ly.json`, `faiss_index_data_giao_duc/`, `drive_state.json`
+và `cai_dat.json` trên VPS được giữ nguyên — xem bẫy số 9 bên dưới.
 
 ## Bước 4 — Nearby
 
@@ -313,6 +323,18 @@ ssh -i ~/.ssh/ovh_vps root@<IP_VPS> /usr/local/bin/capnhat_chi_muc_dem.sh
    để tên tệp xuất hiện chỗ khác trong cùng dòng lệnh.
 8. **Ảnh VPS của OVH bắt đổi mật khẩu mà không có mật khẩu nào** — xem mục
    "Cách vào máy" ở trên.
+9. **Trạng thái trên VPS mới hơn bản ở máy dev.** Máy chủ tự cập nhật chỉ mục ban
+   đêm và nhận tệp người dùng upload qua giao diện, nên sổ ghi chép, FAISS,
+   `drive_state.json`, `cai_dat.json` bên đó luôn đi trước. `02_day_ma_nguon.sh`
+   từng đẩy đè cả bốn thứ này mỗi lần deploy — xóa sạch phần việc đó. Nay mặc
+   định giữ nguyên bản trên VPS; muốn đè phải đặt `DAY_CHI_MUC=1`, và kịch bản
+   sao lưu chúng trên VPS trước khi ghi.
+10. **`tar` mặc định chỉ giữ mtime tới giây.** Sổ ghi chép lưu `modified_ns` của
+   từng tệp, nên sau khi đẩy kho lên, 441/713 tệp lệch phần lẻ giây và giao diện
+   báo "Chờ cập nhật" vĩnh viễn — trình cập nhật so bằng hash nên thấy không có
+   việc gì để làm, không bao giờ ghi lại sổ. Hai kịch bản đẩy nay dùng
+   `tar --format=posix`, `document_inventory` bỏ qua lệch dưới 2 giây, và
+   `capnhat_tailieu_moi.py` làm tươi dấu thời gian cho tệp không đổi nội dung.
 
 ---
 

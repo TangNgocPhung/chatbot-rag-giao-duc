@@ -184,6 +184,37 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(payload["documents"][0]["name"], "tai-lieu.txt")
         self.assertNotIn(directory, response.text)
 
+    def test_document_inventory_bo_qua_lech_mtime_do_chep_kho(self):
+        """Kho chép sang máy khác bằng tar mất phần lẻ giây của mtime; chỉ mục
+        vẫn còn nguyên nên tài liệu không được rơi về "Chờ cập nhật"."""
+        with tempfile.TemporaryDirectory() as directory:
+            data_directory = os.path.join(directory, "data")
+            os.mkdir(data_directory)
+            source_path = os.path.join(data_directory, "tai-lieu.txt")
+            with open(source_path, "w", encoding="utf-8") as source:
+                source.write("Nội dung đã lập chỉ mục")
+            thong_tin = os.stat(source_path)
+            ledger_path = os.path.join(directory, "ledger.json")
+            with open(ledger_path, "w", encoding="utf-8") as ledger:
+                json.dump({
+                    source_path: {
+                        "status": "processed",
+                        "chunk_ids": ["abc"],
+                        "size": thong_tin.st_size,
+                        "modified_ns": (
+                            thong_tin.st_mtime_ns // 1_000_000_000 * 1_000_000_000
+                        ),
+                    }
+                }, ledger)
+            with (
+                patch("rag_service.DATA_PATH", data_directory),
+                patch("rag_service.DUONG_DAN_SO_GHI_CHEP", ledger_path),
+            ):
+                response = self.client.get("/api/documents")
+        payload = response.json()
+        self.assertEqual(payload["summary"]["pending"], 0)
+        self.assertEqual(payload["summary"]["processed"], 1)
+
 
 class LuuTepDinhKemVaoKhoTests(unittest.TestCase):
     """Tệp đính kèm trong chat phải thành tài liệu lâu dài trong kho."""

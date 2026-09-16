@@ -7,6 +7,8 @@
 #
 #  Khong day: kho tai lieu 4,9 GB (dung 03_day_tai_lieu.sh), .venv,
 #  __pycache__, lich su chat, cac ban sao luu *.truoc-khi-*.
+#  Cung KHONG day trang thai rieng cua may chu (so ghi chep, FAISS,
+#  drive_state.json, cai_dat.json) - xem DAY_CHI_MUC ben duoi.
 #
 #  MO HINH BAO VE (khac ban chay o may ca nhan):
 #    - Ung dung chay KHONG mat khau: ai co dia chi cung hoi dap duoc.
@@ -20,6 +22,15 @@ MAY_CHU="${1:-${VPS_HOST:-}}"
 NGUOI_SSH="${2:-${SSH_USER:-root}}"
 KHOA="${SSH_KEY:-$HOME/.ssh/ovh_vps}"
 THU_MUC_XA="/opt/chatbot-rag"
+
+# Mac dinh CHI day ma nguon. So ghi chep, FAISS, drive_state.json va cai_dat.json
+# la trang thai rieng cua may chu: VPS tu chay cap nhat chi muc ban dem, nguoi
+# dung upload tai lieu qua giao dien, cai dat chon ngay tren UI. Ban o may nay
+# gan nhu luc nao cung cu hon, day de len la xoa mat phan viec do va bat VPS
+# embed lai hang gio. Chi lan trien khai DAU TIEN - VPS chua co chi muc nao -
+# moi can:
+#     DAY_CHI_MUC=1 bash trien_khai_vps/02_day_ma_nguon.sh <IP_VPS>
+DAY_CHI_MUC="${DAY_CHI_MUC:-0}"
 
 [ -n "$MAY_CHU" ] || { echo "[LOI] Thieu dia chi VPS. Vi du: bash $0 203.0.113.10 root"; exit 1; }
 cd "$(dirname "$0")/.."
@@ -98,19 +109,42 @@ $SSH "$NHU_ROOT bash -c 'rm -f /tmp/mk.txt; printf \"# Khong chan duong dan nao.
 fi
 
 # ---------------------------------------------------------------------
-buoc "Day ma nguon + giao dien + chi muc FAISS + tessdata (khoang 115 MB)"
+buoc "Day ma nguon + giao dien + tessdata (khoang 115 MB)"
 # tessdata PHAI di kem: ocr_pdf.py tim vie.traineddata trong thu muc tessdata
 # cua du an, thieu no thi PDF scan im lang tra ve rong, khong bao loi gi.
-tar -czf - \
+# --format=posix giu mtime toi nano giay. Dinh dang tar mac dinh cat mat
+# phan le giay, the la tep tren VPS khong con khop modified_ns trong so ghi
+# chep va giao dien bao "Cho cap nhat" du chi muc van con du.
+TEP_TRANG_THAI=()
+if [ "$DAY_CHI_MUC" = "1" ]; then
+  buoc "Sao luu trang thai cu tren VPS truoc khi day de"
+  $SSH "$NHU_ROOT bash -s" <<'REMOTE'
+set -eu
+cd /opt/chatbot-rag
+DICH="sao_luu_truoc_day-$(date +%Y%m%d-%H%M%S)"
+mkdir -p "$DICH"
+for t in data_giao_duc_da_xu_ly.json drive_state.json cai_dat.json faiss_index_data_giao_duc; do
+  [ -e "$t" ] && cp -a "$t" "$DICH/" || true
+done
+chown -R rag:rag "$DICH"
+echo "Da sao luu vao /opt/chatbot-rag/$DICH ($(du -sh "$DICH" | cut -f1))"
+REMOTE
+  TEP_TRANG_THAI=(cai_dat.json data_giao_duc_da_xu_ly.json drive_state.json
+                  faiss_index_data_giao_duc/index.faiss faiss_index_data_giao_duc/index.pkl)
+else
+  buoc "Giu nguyen so ghi chep, FAISS, drive_state.json, cai_dat.json tren VPS"
+  echo "    (dat DAY_CHI_MUC=1 neu that su muon day de - lan trien khai dau tien)"
+fi
+
+tar -czf - --format=posix \
   --exclude='__pycache__' \
   --exclude='*.pyc' \
   --exclude='*.truoc-khi-*' \
   *.py requirements.txt README.md HUONG_DAN_*.md \
   static tests trien_khai_vps tessdata \
-  cai_dat.json bo_cau_hoi_benchmark.json \
-  data_giao_duc_da_xu_ly.json ho_so_van_ban.json phan_loai_tai_lieu.json \
-  tinh_trang_hieu_luc.json meta_llm.json drive_state.json drive_manifest.json \
-  faiss_index_data_giao_duc/index.faiss faiss_index_data_giao_duc/index.pkl \
+  bo_cau_hoi_benchmark.json ho_so_van_ban.json phan_loai_tai_lieu.json \
+  tinh_trang_hieu_luc.json meta_llm.json drive_manifest.json \
+  ${TEP_TRANG_THAI[@]+"${TEP_TRANG_THAI[@]}"} \
 | $SSH "$NHU_ROOT tar -xzf - -C $THU_MUC_XA && $NHU_ROOT chown -R rag:rag $THU_MUC_XA && echo 'Da giai nen tren VPS'"
 
 # ---------------------------------------------------------------------
@@ -119,8 +153,12 @@ buoc "Doi duong dan trong so ghi chep tu Windows sang Linux"
 # "D:\Mr_Hai\..." thi tren VPS moi tep deu trong nhu tep moi, va lan cap nhat
 # chi muc dau tien se embed lai TOAN BO kho - nhieu gio CPU khong can thiet.
 $SSH "$NHU_ROOT python3 - <<'PYEOF'
-import json, pathlib, shutil, datetime
+import json, pathlib, shutil, datetime, sys
 p = pathlib.Path('/opt/chatbot-rag/data_giao_duc_da_xu_ly.json')
+if not p.exists():
+    print('Chua co so ghi chep tren VPS. Lan dau trien khai hay chay lai voi DAY_CHI_MUC=1,')
+    print('hoac de VPS tu lap chi muc tu dau (nhieu gio CPU).')
+    sys.exit(0)
 d = json.loads(p.read_text(encoding='utf-8'))
 GOC = '/opt/chatbot-rag/ollama-rag-desktop/data_giao_duc'
 moi, doi = {}, 0
