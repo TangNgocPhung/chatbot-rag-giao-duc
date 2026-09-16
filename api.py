@@ -389,4 +389,22 @@ def open_source(name: str):
     )
 
 
-app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")
+class GiaoDienTinh(StaticFiles):
+    """Trang HTML luôn phải hỏi lại máy chủ trước khi dùng bản trong bộ nhớ đệm.
+
+    index.html không có số phiên bản trong đường dẫn, nên nếu trình duyệt tự ý
+    giữ lại bản cũ thì người dùng vẫn thấy giao diện cũ sau khi triển khai -
+    kể cả khi app.js và styles.css đã đổi ?v=. "no-cache" không cấm lưu, chỉ
+    bắt hỏi lại: máy chủ trả 304 nếu tệp chưa đổi nên gần như không tốn gì.
+    Các tệp tĩnh còn lại vẫn để trình duyệt nhớ bình thường vì đã có ?v=.
+    """
+
+    def file_response(self, *args, **kwargs):
+        response = super().file_response(*args, **kwargs)
+        duong_dan = str(args[0] if args else kwargs.get("full_path", ""))
+        if duong_dan.endswith(".html"):
+            response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
+app.mount("/", GiaoDienTinh(directory=STATIC_DIR, html=True), name="static")

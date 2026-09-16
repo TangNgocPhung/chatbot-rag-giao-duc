@@ -314,5 +314,24 @@ class HookLuuKhoTests(unittest.TestCase):
         self.assertIn("ổ đĩa đầy", thong_bao)
 
 
+class GiaoDienTinhTests(unittest.TestCase):
+    """Trang chủ phải luôn hỏi lại máy chủ, nếu không người dùng vẫn thấy
+    giao diện cũ sau mỗi lần triển khai."""
+
+    def test_trang_chu_khong_duoc_cache_cung(self):
+        with TestClient(app) as client:
+            response = client.get("/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers.get("cache-control"), "no-cache")
+
+    def test_tep_tinh_khac_van_cache_binh_thuong(self):
+        with TestClient(app) as client:
+            response = client.get("/app.js")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.headers.get("cache-control"))
+
+
 if __name__ == "__main__":
     unittest.main()
