@@ -1154,8 +1154,24 @@ async function submitQuestion(question) {
 }
 
 function stopGeneration() {
+  // Cắt kết nối thôi là chưa đủ: máy chủ không nhận ra tab đã bỏ đi, nó vẫn
+  // sinh tiếp và giữ khoá, nên trạng thái kẹt ở "Đang xử lý một câu hỏi" và câu
+  // hỏi kế tiếp xếp hàng vô hạn. Phải xin dừng tường minh trước rồi mới cắt.
+  fetch('/api/chat/dung', {
+    method: 'POST',
+    headers: { 'X-RAG-Client': maTrinhDuyet() },
+    keepalive: true,
+  }).catch(() => {}).finally(() => pollStatus());
   abortController?.abort();
 }
+
+// Đóng tab hay tải lại trang giữa chừng cũng là bỏ câu trả lời. sendBeacon gửi
+// được cả khi trang đang bị đóng, thứ fetch thường không làm nổi.
+window.addEventListener('pagehide', () => {
+  if (!inFlight) return;
+  if (navigator.sendBeacon) navigator.sendBeacon('/api/chat/dung');
+  else stopGeneration();
+});
 
 async function pollStatus() {
   if (window.location.protocol === 'file:') {

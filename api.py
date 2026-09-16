@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import queue
 import threading
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal
@@ -159,24 +161,69 @@ def dong_bo_drive(x_rag_action: str | None = Header(default=None)):
     return service.drive_dict()
 
 
+# Câu trả lời được sinh trong một luồng riêng, nối với luồng phát HTTP bằng
+# hàng chờ, chứ không sinh thẳng trong luồng phát. Lý do rất cụ thể: khi người
+# dùng bấm "Cuộc trò chuyện mới", bấm dừng hay đóng tab, trình duyệt chỉ cắt
+# kết nối. Bộ sinh nằm trong luồng phát sẽ treo lại vĩnh viễn ở đúng chỗ yield
+# dở dang, không ai gọi tiếp và cũng không ai đóng nó, nên khối "with khoá sinh
+# câu trả lời" không bao giờ thoát: máy chủ báo "đang xử lý một câu hỏi" mãi và
+# mọi câu hỏi sau đều xếp hàng sau một câu chẳng còn ai đọc. Luồng riêng thì tự
+# chạy tiếp, tự phát hiện bên nhận đã đi, tự đóng bộ sinh và nhả khoá.
+SO_SU_KIEN_CHO = 64          # đủ đệm cho mạng chậm, không đủ để sinh hết một câu
+GIAY_CHO_BEN_NHAN = 20.0     # hàng chờ đầy lâu hơn thế coi như bên nhận đã đi
+_HET_SU_KIEN = object()
+
+
+def _xep_hang(hang: queue.Queue, su_kien) -> bool:
+    """Đưa sự kiện vào hàng chờ; False nghĩa là thôi sinh tiếp."""
+    han = time.monotonic() + GIAY_CHO_BEN_NHAN
+    while True:
+        if service.huy_sinh.is_set():
+            return False
+        try:
+            hang.put(su_kien, timeout=0.5)
+            return True
+        except queue.Full:
+            # Hàng đầy nghĩa là bên nhận không lấy nữa. Chờ có hạn rồi bỏ, để
+            # tab đã đóng không giữ khoá thêm một câu trả lời nữa.
+            if time.monotonic() >= han:
+                return False
+
+
+@app.post("/api/chat/dung")
+def chat_dung():
+    """Xin dừng câu trả lời đang sinh dở.
+
+    Máy chủ chỉ giữ một lượt sinh tại một thời điểm nên lời xin dừng cũng chung
+    cho cả máy: mở hai tab cùng hỏi thì tab này bấm dừng sẽ dừng câu của tab kia.
+    Chấp nhận được với một máy chủ mỗi lần chỉ trả lời được một câu.
+    """
+    return {"dung": service.yeu_cau_dung()}
+
+
 @app.post("/api/chat/stream")
 def chat_stream(request: ChatRequest, x_rag_client: str | None = Header(default=None)):
     if service.status.state != "ready":
         raise HTTPException(status_code=503, detail=service.status.message)
 
-    def generate():
+    history = [message.model_dump() for message in request.history]
+    hang: queue.Queue = queue.Queue(maxsize=SO_SU_KIEN_CHO)
+
+    def sinh_va_ghi():
         # Gom lại trong lúc phát để ghi vào lịch sử sau khi xong. Ghi ở cuối chứ
         # không ghi dần từng token: một lượt hỏi là một dòng, không phải hàng
-        # nghìn lần cập nhật.
+        # nghìn lần cập nhật. Việc gom nằm trong luồng sinh chứ không nằm bên
+        # luồng phát, nhờ vậy câu bị dừng giữa chừng vẫn được ghi lại - phần đã
+        # trả lời được cũng là dữ liệu đáng xem khi phân tích.
         cau_tra_loi = ""
         cac_nguon: list = []
         thong_tin = {"giay": 0.0, "trich_dan_ok": True, "so_lieu_ok": True,
                      "tu_choi": False, "tu_cache": False}
+        bo_sinh = service.stream_answer(
+            request.question, history, request.tep_ids, request.pham_vi
+        )
         try:
-            history = [message.model_dump() for message in request.history]
-            for event in service.stream_answer(
-                request.question, history, request.tep_ids, request.pham_vi
-            ):
+            for event in bo_sinh:
                 loai = event.get("type")
                 if loai == "token":
                     cau_tra_loi += event.get("content", "")
@@ -188,16 +235,19 @@ def chat_stream(request: ChatRequest, x_rag_client: str | None = Header(default=
                     thong_tin["so_lieu_ok"] = event.get("figures_ok", True)
                     thong_tin["tu_choi"] = bool(event.get("abstained"))
                     thong_tin["tu_cache"] = bool(event.get("tu_cache"))
-                yield json.dumps(event, ensure_ascii=False) + "\n"
-        except GeneratorExit:
-            # Người dùng đóng tab giữa chừng: vẫn ghi phần đã trả lời được, vì
-            # câu hỏi bị bỏ dở cũng là dữ liệu đáng xem khi phân tích.
-            return
+                if not _xep_hang(hang, event):
+                    break
         except Exception as exc:
-            yield json.dumps(
-                {"type": "error", "message": str(exc)}, ensure_ascii=False
-            ) + "\n"
+            _xep_hang(hang, {"type": "error", "message": str(exc)})
         finally:
+            # Đóng tay ngay trong luồng vừa lặp nó: lúc này bộ sinh đang treo ở
+            # một yield chứ không đang chạy, nên close() vào được, khối "with
+            # khoá" thoát và khoá sinh câu trả lời chắc chắn được nhả.
+            # getattr vì test thay stream_answer bằng iterator thường, không
+            # phải bộ sinh; bản thật luôn có close().
+            dong = getattr(bo_sinh, "close", None)
+            if dong is not None:
+                dong()
             if cau_tra_loi.strip():
                 lich_su_chat.ghi_luot(
                     client_id=x_rag_client or "",
@@ -212,6 +262,31 @@ def chat_stream(request: ChatRequest, x_rag_client: str | None = Header(default=
                     tu_choi=thong_tin["tu_choi"],
                     tu_cache=thong_tin["tu_cache"],
                 )
+            # Báo hết dòng sau khi đã ghi lịch sử: giao diện đọc xong dòng là
+            # gọi ngay danh sách hội thoại, báo sớm thì lượt vừa rồi chưa kịp
+            # nằm trong danh sách đó.
+            try:
+                hang.put_nowait(_HET_SU_KIEN)
+            except queue.Full:
+                pass  # bên nhận không lấy nữa thì cũng không cần báo hết
+
+    def generate():
+        luong = threading.Thread(
+            target=sinh_va_ghi, name="sinh-cau-tra-loi", daemon=True
+        )
+        luong.start()
+        while True:
+            try:
+                su_kien = hang.get(timeout=1.0)
+            except queue.Empty:
+                # Khoảng lặng dài là bình thường (truy hồi, token đầu tiên trên
+                # CPU). Chỉ dừng khi luồng sinh đã chết mà hàng chờ cũng cạn.
+                if luong.is_alive():
+                    continue
+                break
+            if su_kien is _HET_SU_KIEN:
+                break
+            yield json.dumps(su_kien, ensure_ascii=False) + "\n"
 
     return StreamingResponse(
         generate(),
