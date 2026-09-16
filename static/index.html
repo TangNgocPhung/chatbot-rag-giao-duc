@@ -6,7 +6,7 @@
   <meta name="description" content="Chatbot RAG hỗ trợ tra cứu và hỏi đáp từ kho tri thức giáo dục.">
   <title>Chatbot RAG Giáo dục</title>
   <link rel="icon" href="./favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./styles.css?v=1.4.4">
+  <link rel="stylesheet" href="./styles.css?v=1.4.6">
   <script>
     /* Đặt nền đúng ngay từ lần vẽ đầu: app.js dùng defer nên nếu đợi nó thì
        người dùng chế độ tối sẽ thấy một nháy màu trắng khi mở trang. */
@@ -105,10 +105,13 @@
             <svg class="chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg>
           </summary>
           <div class="credit-body">
-            <p class="credit-org">
-              Trường Đại học Sư phạm Thành phố Hồ Chí Minh<br>
-              Khoa Công nghệ thông tin
-            </p>
+            <div class="credit-school">
+              <img class="credit-logo" src="./logo-hcmue-emblem.png?v=1" width="358" height="200" alt="Logo Trường Đại học Sư phạm Thành phố Hồ Chí Minh" loading="lazy" decoding="async">
+              <p class="credit-org">
+                Trường Đại học Sư phạm Thành phố Hồ Chí Minh<br>
+                Khoa Công nghệ thông tin
+              </p>
+            </div>
             <p class="credit-line"><span>Giảng viên hướng dẫn</span><strong>TS. Nguyễn Minh Hải</strong></p>
             <p class="credit-line"><span>Học viên thực hiện</span></p>
             <ol class="credit-members">
@@ -159,9 +162,15 @@
           <p class="welcome-copy">Tra cứu kiến thức về giáo dục mầm non, phổ thông, thường xuyên, nghề nghiệp, đại học, cùng các chính sách và quy định quản lý giáo dục.</p>
 
           <div class="welcome-credit">
+            <img class="welcome-credit-logo" src="./logo-hcmue.png?v=1" width="1240" height="143" alt="Logo Trường Đại học Sư phạm Thành phố Hồ Chí Minh" loading="lazy" decoding="async">
             <p class="welcome-credit-org">Trường Đại học Sư phạm Thành phố Hồ Chí Minh · Khoa Công nghệ thông tin</p>
             <p class="welcome-credit-line"><span>Giảng viên hướng dẫn</span> <strong>TS. Nguyễn Minh Hải</strong></p>
-            <p class="welcome-credit-line"><span>Học viên thực hiện</span> <strong>Hoàng Châu Ngọc Phương</strong> (KHMT836028) · <strong>Tăng Ngọc Phụng</strong> (KHMT836027) · <strong>Lê Thị Mai Len</strong> (KHMT836015)</p>
+            <p class="welcome-credit-line"><span>Học viên thực hiện</span></p>
+            <ul class="welcome-credit-members">
+              <li><strong>Hoàng Châu Ngọc Phương</strong> (KHMT836028)</li>
+              <li><strong>Tăng Ngọc Phụng</strong> (KHMT836027)</li>
+              <li><strong>Lê Thị Mai Len</strong> (KHMT836015)</li>
+            </ul>
           </div>
 
           <div class="suggestion-grid">
@@ -303,6 +312,6 @@
       </div>
     </div>
   </dialog>
-  <script src="./app.js?v=1.4.4" defer></script>
+  <script src="./app.js?v=1.4.5" defer></script>
 </body>
 </html>
