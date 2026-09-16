@@ -131,6 +131,30 @@ class NhanDienTests(unittest.TestCase):
         van_ban, _ = tinh_toan.tra_loi("32 trên 40 là bao nhiêu phần trăm")
         self.assertIn("80%", van_ban)
 
+    def test_dau_bang_la_cach_hoi_ngan_nhat(self):
+        """"5+3=mấy" là cách gõ một phép tính nhanh nhất trong ô chat, nhưng bộ
+        phân tích không biết dấu "=" - để nguyên thì cả nhóm câu này rơi ra
+        ngoài. Đây chính là câu đầu tiên người dùng thật gõ vào bản đã chạy."""
+        self.assertEqual(self.gia_tri("5+3=mấy"), 8)
+        self.assertEqual(self.gia_tri("5+3="), 8)
+        self.assertEqual(self.gia_tri("5+3=?"), 8)
+        self.assertEqual(self.gia_tri("2+3=MẤY?"), 5)
+        self.assertAlmostEqual(self.gia_tri("35x17=bao nhiêu"), 595)
+
+    def test_chu_phep_bang_tieng_viet(self):
+        """Bộ phân tích có sẵn cả sáu phép, nên mỗi phép phải có đủ chữ tiếng
+        Việt dẫn tới nó - thiếu một chữ là thiếu lặng lẽ."""
+        self.assertEqual(self.gia_tri("5 cộng 3"), 8)
+        self.assertEqual(self.gia_tri("10 trừ 4"), 6)
+        self.assertEqual(self.gia_tri("6 nhân 7"), 42)
+        self.assertEqual(self.gia_tri("20 chia 4"), 5)
+        self.assertEqual(self.gia_tri("3 mũ 4"), 81)
+
+    def test_dau_bang_giua_cau_khong_bien_thanh_phep_kiem_dap_an(self):
+        """"5+3=8 đúng không" thành "5+3 8" - hai con số đứng cạnh nhau không
+        thành biểu thức. Công cụ này tính chứ không chấm bài hộ ai."""
+        self.assertIsNone(tinh_toan.tra_loi("5+3=8 đúng không"))
+
     def test_chia_cho_khong_thi_tra_ve_loi_chu_khong_tra_ve_none(self):
         """None nghĩa là "đẩy sang RAG". Người dùng gõ 1/0 thì rõ ràng muốn một
         phép tính, đẩy sang RAG chỉ tổ nhận về một câu trả lời lạc đề."""
@@ -169,6 +193,11 @@ class TuChoiTests(unittest.TestCase):
     def test_mot_con_so_tro_troi_khong_phai_phep_tinh(self):
         self.khong_nhan("2340000")
         self.khong_nhan("lương cơ sở")
+
+    def test_chu_may_khong_nuot_chu_may_tinh(self):
+        """"mấy" là chữ dẫn, mà bỏ dấu xong "máy" cũng thành "may". Chỉ cần
+        phần còn lại không phải biểu thức là câu tự rơi sang RAG."""
+        self.khong_nhan("máy tính của tôi")
 
     def test_cau_hoi_thuong_ngay_khong_co_phep_tinh(self):
         self.khong_nhan("Khung cơ cấu hệ thống giáo dục quốc dân gồm những cấp học nào?")

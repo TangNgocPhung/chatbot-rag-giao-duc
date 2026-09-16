@@ -133,6 +133,7 @@ CHU_PHEP = [
     (r"\bnhan voi\b|\bnhan\b", "*"),
     (r"\bchia cho\b|\bchia\b", "/"),
     (r"\btren\b", "/"),
+    (r"\bmu\b", "^"),
 ]
 
 MAU_TOKEN = re.compile(r"""
@@ -314,7 +315,7 @@ CHU_DAN = [
     r"tinh gium(?: (?:minh|toi|em))?", r"tinh xem", r"tinh",
     r"ket qua (?:cua|phep tinh)?",
     r"la bao nhieu", r"bang bao nhieu", r"ra bao nhieu", r"bao nhieu",
-    r"bang may", r"ra may", r"thi bang", r"bang", r"la",
+    r"bang may", r"ra may", r"thi bang", r"bang", r"la", r"may",
     r"nhe", r"nhi", r"a", r"vay", r"the", r"voi", r"di",
 ]
 
@@ -360,9 +361,20 @@ class KetQua:
 
 
 def _bo_chu_dan(cau_hoi: str) -> str:
-    """Bỏ chữ dẫn và dấu câu, còn lại phần ruột của câu hỏi."""
+    """Bỏ chữ dẫn và dấu câu, còn lại phần ruột của câu hỏi.
+
+    Dấu "=" cũng bị bỏ, vì trong ô chat nó không phải một phép toán mà là cách
+    hỏi ngắn nhất: "5+3=", "5+3=?", "5+3=mấy". Bộ phân tích bên dưới không biết
+    dấu "=", nên để nguyên thì cả ba câu đó rơi ra ngoài - mà đây lại đúng là
+    cách người ta gõ một phép tính nhanh nhất.
+
+    Bỏ luôn cả "=" ở giữa câu: "5+3=8 đúng không" thành "5+3 8", hai con số
+    đứng cạnh nhau không thành biểu thức, câu tự rơi sang RAG. Đó là kết cục
+    đúng - công cụ này tính chứ không kiểm tra đáp án hộ ai.
+    """
     con = MAU_CHU_DAN.sub(" ", bo_dau(cau_hoi))
-    con = con.replace("?", " ").replace("!", " ").replace(";", " ")
+    for dau in "?!;=":
+        con = con.replace(dau, " ")
     return re.sub(r"\s+", " ", con).strip(" ,.")
 
 
