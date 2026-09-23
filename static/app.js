@@ -830,6 +830,63 @@ function renderSources(container, sourceList) {
     }
     container.append(chip);
   });
+  renderTrangGoc(container, sourceList);
+}
+
+// Ảnh đúng trang được trích (PDF/ảnh trong kho) để đối chiếu bằng mắt: bảng
+// biểu, chữ ký, con dấu mà phần chữ trích ra không thể hiện được.
+const SO_TRANG_GOC_TOI_DA = 4;
+
+function renderTrangGoc(container, sourceList) {
+  const daCo = new Set();
+  const cacTrang = [];
+  sourceList.forEach((source, index) => {
+    if (source.external || cacTrang.length >= SO_TRANG_GOC_TOI_DA) return;
+    const taiLieu = window.khongGianHoc?.tuDuongDan(source.url, source.name);
+    if (!taiLieu) return;
+    // PDF không rõ trang thì bỏ: ảnh trang 1 thường chỉ là trang bìa. Ảnh chỉ có một trang.
+    const laPdf = /\.pdf$/i.test(taiLieu.ten || '');
+    const trang = Number(source.page) || (laPdf ? 0 : 1);
+    const khoa = `${taiLieu.tep || taiLieu.nguon}#${trang}`;
+    if (!trang || daCo.has(khoa)) return;
+    daCo.add(khoa);
+    cacTrang.push({ source, taiLieu, trang, evidence: source.evidence || index + 1 });
+  });
+  if (!cacTrang.length) return;
+
+  const dai = document.createElement('div');
+  dai.className = 'source-pages';
+  for (const { source, taiLieu, trang, evidence } of cacTrang) {
+    const the = document.createElement('a');
+    the.className = 'source-page';
+    the.href = source.url;
+    the.target = '_blank';
+    the.rel = 'noopener noreferrer';
+    the.title = `Mở ${source.name} - trang ${trang}`;
+    the.addEventListener('click', (event) => {
+      if (event.ctrlKey || event.metaKey || event.shiftKey || event.button !== 0) return;
+      event.preventDefault();
+      window.khongGianHoc.moTaiLieu({ ...taiLieu, trang });
+    });
+    const anh = document.createElement('img');
+    anh.loading = 'lazy';
+    anh.decoding = 'async';
+    anh.alt = `Trang ${trang} của ${source.name}`;
+    const thamSo = new URLSearchParams(taiLieu.tep ? { tep: taiLieu.tep } : { nguon: taiLieu.nguon });
+    thamSo.set('so', trang);
+    thamSo.set('rong', 400);
+    anh.src = `/api/doc/trang?${thamSo}`;
+    // Tệp hỏng/đã bị xoá khỏi kho: bỏ ô đó thay vì để khung ảnh vỡ.
+    anh.addEventListener('error', () => {
+      the.remove();
+      if (!dai.children.length) dai.remove();
+    });
+    const nhan = document.createElement('span');
+    nhan.textContent = `[${evidence}] Trang ${trang}`;
+    the.append(anh, nhan);
+    dai.append(the);
+  }
+  container.append(dai);
 }
 
 function renderHieuLuc(container, cacCanhBao) {
